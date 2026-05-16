@@ -43,11 +43,49 @@ if errorlevel 1 (
 
 echo.
 echo ============================================
-echo   Готово!
+echo   Сборка готова!
 echo ============================================
 echo.
 echo Папка:  build\GlassCraft-latest\
 echo Запуск: build\GlassCraft-latest\GlassCraft.exe
 echo.
+echo ============================================
+echo.
 
+set /p RELEASE_CHOICE="Выложить новый релиз на GitHub? (y/N): "
+if /i not "%RELEASE_CHOICE%"=="y" (
+    echo.
+    echo Готово. Релиз пропущен.
+    pause
+    exit /b 0
+)
+
+echo.
+echo ============================================
+echo   Публикация релиза
+echo ============================================
+echo.
+
+where gh >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ✗ GitHub CLI ^(gh^) не установлен.
+    echo.
+    echo   Установка:    winget install GitHub.cli
+    echo   Авторизация:  gh auth login
+    echo.
+    echo Сначала установи и залогинься, потом запусти build.bat снова.
+    pause
+    exit /b 1
+)
+
+call npm run release
+if errorlevel 1 (
+    echo.
+    echo ОШИБКА публикации релиза. Смотри лог выше.
+    pause
+    exit /b 1
+)
+
+echo.
 pause

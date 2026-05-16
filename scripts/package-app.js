@@ -19,7 +19,13 @@ const OUT_RESOURCES = path.join(OUT, 'resources');
 const OUT_APP = path.join(OUT_RESOURCES, 'app');
 
 const APP_NAME = 'GlassCraft';
-const PROD_DEPS = ['adm-zip', 'minecraft-launcher-core', 'node-fetch'];
+
+// Берём prod-зависимости автоматически из package.json — чтобы не забывать.
+function readProdDeps() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf-8'));
+  return Object.keys(pkg.dependencies || {});
+}
+const PROD_DEPS = readProdDeps();
 
 function log(stage, msg) {
   console.log(`[${stage}] ${msg}`);

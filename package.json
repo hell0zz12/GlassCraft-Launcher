@@ -1,0 +1,43 @@
+{
+  "name": "glasscraft-launcher",
+  "version": "0.1.0",
+  "description": "Minecraft launcher with Modrinth integration in Apple Liquid Glass style",
+  "main": "src/main.js",
+  "homepage": "https://github.com/your-username/glasscraft",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/glasscraft.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/glasscraft/issues"
+  },
+  "keywords": [
+    "minecraft",
+    "launcher",
+    "modrinth",
+    "fabric",
+    "electron",
+    "liquid-glass"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --devtools",
+    "icons": "node scripts/build-icons.js",
+    "build": "node scripts/package-app.js"
+  },
+  "author": "GlassCraft",
+  "license": "MIT",
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "discord-rpc": "^4.0.1",
+    "minecraft-launcher-core": "^3.18.2",
+    "node-fetch": "^2.7.0",
+    "psl": "1.9.0"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "electron": "^31.0.0",
+    "png-to-ico": "^3.0.1",
+    "rcedit": "^5.0.2"
+  }
+}

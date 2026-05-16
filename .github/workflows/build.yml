@@ -1,0 +1,47 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Build portable
+        run: npm run build
+
+      - name: Zip artifact
+        shell: pwsh
+        run: |
+          $src = Get-ChildItem build -Directory | Where-Object { $_.Name -like "GlassCraft-*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          Compress-Archive -Path "$($src.FullName)\*" -DestinationPath "GlassCraft-windows-x64.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GlassCraft-windows-x64
+          path: GlassCraft-windows-x64.zip
+          retention-days: 14
+
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: GlassCraft-windows-x64.zip

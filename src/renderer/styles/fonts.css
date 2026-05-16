@@ -1,0 +1,17 @@
+/* SF Pro Display Rounded — fallback стек, использующий системный шрифт Apple,
+   а на других платформах — близкие по стилю Inter / системные. */
+:root {
+  --font-display: -apple-system, "SF Pro Rounded", "SF Pro Display", "SF Pro",
+                  "Inter", "Helvetica Neue", "Segoe UI Variable", "Segoe UI",
+                  Roboto, system-ui, sans-serif;
+  --font-text:    -apple-system, "SF Pro Text", "SF Pro", "Inter",
+                  "Helvetica Neue", "Segoe UI", Roboto, system-ui, sans-serif;
+}
+
+html, body, button, input, select, textarea {
+  font-family: var(--font-display);
+  font-feature-settings: "ss01", "cv11", "case";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}

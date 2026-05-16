@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a84ff"/>
+      <stop offset="50%" stop-color="#5e5ce6"/>
+      <stop offset="100%" stop-color="#ff375f"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="bg-glow" cx="0.5" cy="0.4" r="0.8">
+      <stop offset="0%" stop-color="#0a84ff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#0a0a14" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8"/>
+    </filter>
+  </defs>
+
+  <!-- Прозрачный фон -->
+  <rect width="512" height="512" fill="transparent"/>
+
+  <!-- Внешнее свечение -->
+  <rect x="0" y="0" width="512" height="512" fill="url(#bg-glow)" filter="url(#soft)" opacity="0.8"/>
+
+  <!-- Главный squircle -->
+  <rect x="56" y="56" width="400" height="400" rx="108" ry="108" fill="url(#g)"/>
+
+  <!-- Стеклянный блик сверху -->
+  <rect x="56" y="56" width="400" height="400" rx="108" ry="108" fill="url(#gloss)"/>
+
+  <!-- Внутренняя обводка для глубины -->
+  <rect x="58" y="58" width="396" height="396" rx="106" ry="106"
+        fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2"/>
+
+  <!-- Буква G — Apple-style geometric -->
+  <g fill="#ffffff">
+    <path d="M256 144
+             C 192 144, 144 192, 144 256
+             C 144 320, 192 368, 256 368
+             C 304 368, 344 344, 360 304
+             L 360 248
+             L 268 248
+             L 268 282
+             L 322 282
+             C 314 308, 290 326, 256 326
+             C 216 326, 186 296, 186 256
+             C 186 216, 216 186, 256 186
+             C 286 186, 308 200, 320 224
+             L 354 204
+             C 336 168, 300 144, 256 144 Z"/>
+  </g>
+
+  <!-- Тонкий блик-полоса по диагонали (опционально) -->
+  <path d="M 90 200 L 120 170 L 240 290 L 210 320 Z"
+        fill="#ffffff" opacity="0.04"/>
+</svg>

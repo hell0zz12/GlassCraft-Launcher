@@ -1,6 +1,6 @@
 {
   "name": "glasscraft-launcher",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Minecraft launcher with Modrinth integration in Apple Liquid Glass style",
   "main": "src/main.js",
   "homepage": "https://github.com/your-username/glasscraft",

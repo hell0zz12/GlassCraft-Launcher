@@ -54,3 +54,4 @@ npm run dev
 - Версия лаунчера (видно в `package.json`)
 - Последние 50 строк из `~/.glasscraft/launcher.log`
 - Шаги воспроизведения
+

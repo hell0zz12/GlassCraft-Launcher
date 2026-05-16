@@ -14,6 +14,8 @@ const state = {
   java: {},
   installed: {},
   gameRunning: false,
+  theme: 'glass',
+  customTheme: { accent: '#0a84ff', bg: '#15151b', text: '#ffffff', bgAlpha: 100 },
   searchCache: { mod: false, resourcepack: false, shader: false },
   searchTimers: {},
   libraryTab: 'mod',
@@ -154,11 +156,150 @@ $$('.nav-item').forEach((btn) => {
   btn.addEventListener('click', () => showPage(btn.dataset.page));
 });
 
-/* ===================== Init ===================== */
+/* ===================== Theme ===================== */
+function applyTheme(theme, custom) {
+  const known = new Set(['glass', 'flat-dark', 'flat-light', 'midnight', 'sunset', 'custom']);
+  const t = known.has(theme) ? theme : 'glass';
+
+  // Сначала всегда полностью чистим инлайн-стили — иначе предыдущая тема (особенно custom)
+  // оставит свои переменные и они смешаются с новой.
+  resetCustomInlineTheme();
+
+  document.documentElement.setAttribute('data-theme', t);
+  document.body.setAttribute('data-theme', t);
+
+  const editor = $('#customThemeEditor');
+  if (editor) editor.hidden = t !== 'custom';
+
+  $$('.theme-card').forEach((c) => c.classList.toggle('active', c.dataset.themePick === t));
+
+  if (t === 'custom' && custom) {
+    applyCustomTheme(custom);
+  }
+}
+
+function resetCustomInlineTheme() {
+  const root = document.documentElement.style;
+  ['--accent', '--accent-hover', '--text', '--text-dim', '--text-mute',
+   '--shell-bg', '--bg-extra', '--fill', '--fill-hover', '--fill-active',
+   '--stroke', '--stroke-soft'
+  ].forEach((p) => root.removeProperty(p));
+  document.body.style.background = '';
+}
+
+function applyCustomTheme(c) {
+  const root = document.documentElement.style;
+  root.setProperty('--accent', c.accent);
+  root.setProperty('--accent-hover', lightenHex(c.accent, 0.15));
+  root.setProperty('--text', c.text);
+
+  // text-dim / text-mute вычисляем от text — это полупрозрачные варианты
+  const textRgb = hexToRgb(c.text);
+  root.setProperty('--text-dim', `rgba(${textRgb.r},${textRgb.g},${textRgb.b},0.62)`);
+  root.setProperty('--text-mute', `rgba(${textRgb.r},${textRgb.g},${textRgb.b},0.40)`);
+
+  // Stroke и fill подбираем от противоположности текста (если текст светлый — белые, если тёмный — чёрные)
+  const isDarkText = (textRgb.r + textRgb.g + textRgb.b) / 3 < 128;
+  const overlay = isDarkText ? '0,0,0' : '255,255,255';
+  root.setProperty('--stroke', `rgba(${overlay},0.16)`);
+  root.setProperty('--stroke-soft', `rgba(${overlay},0.08)`);
+  root.setProperty('--fill', `rgba(${overlay},0.05)`);
+  root.setProperty('--fill-hover', `rgba(${overlay},0.10)`);
+  root.setProperty('--fill-active', `rgba(${overlay},0.16)`);
+
+  // Bg с альфой
+  const alpha = (c.bgAlpha ?? 100) / 100;
+  const rgba = hexToRgba(c.bg, alpha);
+  root.setProperty('--shell-bg', rgba);
+
+  if (alpha < 1) {
+    root.setProperty('--bg-extra', 'transparent');
+    document.body.style.background = '';
+  } else {
+    root.setProperty('--bg-extra', c.bg);
+    document.body.style.background = c.bg;
+  }
+}
+
+function hexToRgb(hex) {
+  const m = hex.replace('#', '');
+  return {
+    r: parseInt(m.slice(0, 2), 16),
+    g: parseInt(m.slice(2, 4), 16),
+    b: parseInt(m.slice(4, 6), 16),
+  };
+}
+
+function hexToRgba(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function lightenHex(hex, amount) {
+  let { r, g, b } = hexToRgb(hex);
+  r = Math.min(255, Math.round(r + (255 - r) * amount));
+  g = Math.min(255, Math.round(g + (255 - g) * amount));
+  b = Math.min(255, Math.round(b + (255 - b) * amount));
+  return '#' + [r, g, b].map((n) => n.toString(16).padStart(2, '0')).join('');
+}
+
+function bindThemePicker() {
+  $$('.theme-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const theme = card.dataset.themePick;
+      state.theme = theme;
+      applyTheme(theme, state.customTheme);
+      saveThemeChoice();
+    });
+  });
+
+  // Кастомный редактор
+  const accent = $('#customAccent');
+  const bg = $('#customBg');
+  const txt = $('#customText');
+  const alpha = $('#customBgAlpha');
+  if (accent && bg && txt && alpha) {
+    [accent, bg, txt, alpha].forEach((el) => {
+      el.addEventListener('input', () => {
+        state.customTheme = {
+          accent: accent.value,
+          bg: bg.value,
+          text: txt.value,
+          bgAlpha: parseInt(alpha.value, 10),
+        };
+        if (state.theme === 'custom') applyCustomTheme(state.customTheme);
+        saveThemeChoice();
+      });
+    });
+  }
+}
+
+async function saveThemeChoice() {
+  state.settings = { ...state.settings, theme: state.theme, customTheme: state.customTheme };
+  await api.saveSettings(state.settings);
+}
+
+function loadThemeFromSettings() {
+  const t = state.settings?.theme || 'glass';
+  const c = state.settings?.customTheme || state.customTheme;
+  state.theme = t;
+  state.customTheme = c;
+  // Заполняем editor значениями
+  if ($('#customAccent')) $('#customAccent').value = c.accent || '#0a84ff';
+  if ($('#customBg')) $('#customBg').value = c.bg || '#15151b';
+  if ($('#customText')) $('#customText').value = c.text || '#ffffff';
+  if ($('#customBgAlpha')) $('#customBgAlpha').value = c.bgAlpha ?? 100;
+  applyTheme(t, c);
+}
+
+
 async function init() {
   state.profile = await api.getProfile();
   state.settings = await api.getSettings();
   $('#userName').textContent = state.profile.username || 'Steve';
+
+  bindThemePicker();
+  loadThemeFromSettings();
 
   await refreshInstalled();
 
@@ -640,23 +781,341 @@ async function installProject(project, type) {
       toast('Нет совместимой версии. Сними фильтры и попробуй снова');
       return;
     }
-    const version = versions[0];
-    const isReinstall = !!state.installed[project.slug];
-    toast(`${isReinstall ? 'Переустановка' : 'Загрузка'} ${project.title}…`);
-    const res = await api.install({ project, version, gameDir: state.settings.gameDir });
-    if (res?.ok) {
-      await refreshInstalled();
-      applyInstalledStateToCard(project.slug);
-      // Карточка получает «вспышку», что обновилась
-      const card = document.querySelector(`[data-slug="${CSS.escape(project.slug)}"]`);
-      card?.classList.add('just-installed');
-      setTimeout(() => card?.classList.remove('just-installed'), 1200);
-      toast(`${project.title} ${isReinstall ? 'переустановлен' : 'установлен'}`);
+    // Если версия одна — ставим без диалога
+    if (versions.length === 1) {
+      await doInstall(project, versions[0]);
+      return;
     }
+    // Иначе показываем выбор
+    openVersionPicker(project, versions);
   } catch (err) {
     console.error(err);
     toast(`Ошибка установки: ${err.message}`);
   }
+}
+
+async function doInstall(project, version) {
+  try {
+    // Сначала проверим зависимости
+    const requiredDeps = (version.dependencies || []).filter((d) => d.dependency_type === 'required');
+    const optionalDeps = (version.dependencies || []).filter((d) => d.dependency_type === 'optional');
+
+    // Резолвим info по project_id для всех required+optional
+    const allDeps = [...requiredDeps, ...optionalDeps];
+    if (allDeps.length) {
+      const resolved = await resolveDependencies(allDeps, version);
+      // Фильтруем те, что уже установлены
+      const notInstalled = resolved.filter((d) => !state.installed[d.project?.slug]);
+      if (notInstalled.length) {
+        // Показываем диалог выбора зависимостей
+        await openDependencyDialog(project, version, notInstalled);
+        return;
+      }
+    }
+
+    await performInstall(project, version);
+  } catch (err) {
+    console.error(err);
+    toast(`Ошибка установки: ${err.message}`);
+  }
+}
+
+async function performInstall(project, version, depsToInstall = []) {
+  const isReinstall = !!state.installed[project.slug];
+  toast(`${isReinstall ? 'Переустановка' : 'Загрузка'} ${project.title}…`);
+  const res = await api.install({ project, version, gameDir: state.settings.gameDir });
+  if (!res?.ok) {
+    toast(`Ошибка: ${res?.error || 'не удалось установить'}`);
+    return;
+  }
+
+  // Ставим зависимости одну за другой
+  for (const dep of depsToInstall) {
+    if (!dep.project || !dep.version) continue;
+    toast(`Загрузка зависимости: ${dep.project.title}…`);
+    try {
+      await api.install({ project: dep.project, version: dep.version, gameDir: state.settings.gameDir });
+    } catch (e) {
+      console.error('dep install', dep.project.slug, e);
+      toast(`Не удалось поставить ${dep.project.title}`);
+    }
+  }
+
+  await refreshInstalled();
+  applyInstalledStateToCard(project.slug);
+  for (const dep of depsToInstall) {
+    if (dep.project) applyInstalledStateToCard(dep.project.slug);
+  }
+
+  const card = document.querySelector(`[data-slug="${CSS.escape(project.slug)}"]`);
+  card?.classList.add('just-installed');
+  setTimeout(() => card?.classList.remove('just-installed'), 1200);
+
+  const total = 1 + depsToInstall.length;
+  toast(`${project.title} установлен${total > 1 ? ` (+${total - 1} зависимость)` : ''}`);
+}
+
+async function resolveDependencies(deps, parentVersion) {
+  // Нужно узнать project info и подходящую версию для каждого dep
+  const out = [];
+  const gameVersion = (parentVersion.game_versions || [])[0];
+  const loader = (parentVersion.loaders || [])[0];
+
+  for (const dep of deps) {
+    try {
+      let project = null;
+      let depVersion = null;
+
+      if (dep.project_id) {
+        project = await api.getProject(dep.project_id);
+      }
+
+      if (dep.version_id) {
+        // Известна конкретная версия — берём её versions, фильтруем
+        const versions = await api.getProjectVersions({
+          slug: dep.project_id,
+          gameVersion: '',
+          loader: '',
+        });
+        depVersion = versions?.find((v) => v.id === dep.version_id);
+      } else if (project) {
+        // Подбираем по той же MC-версии и loader
+        const versions = await api.getProjectVersions({
+          slug: project.slug,
+          gameVersion,
+          loader,
+        });
+        depVersion = (versions || [])[0];
+      }
+
+      if (project) {
+        out.push({
+          dep,
+          project,
+          version: depVersion,
+          required: dep.dependency_type === 'required',
+        });
+      }
+    } catch (e) {
+      console.error('resolveDep', dep, e);
+    }
+  }
+  return out;
+}
+
+function openDependencyDialog(parentProject, parentVersion, deps) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal modal-deps">
+        <div class="modal-head">
+          <div>
+            <div class="modal-title">Зависимости</div>
+            <div class="modal-sub-line">${escapeHtml(parentProject.title)} требует ещё ${deps.length} мод${deps.length === 1 ? '' : 'а'}</div>
+          </div>
+          <button class="modal-close" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <div class="dep-list">
+          ${deps.map((d) => depRowHTML(d)).join('')}
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-ghost btn-small modal-cancel">Только основной</button>
+          <button class="btn btn-primary btn-small modal-confirm">Установить выбранные</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('show'));
+
+    function close(result) {
+      overlay.classList.remove('show');
+      setTimeout(() => {
+        overlay.remove();
+        resolve(result);
+      }, 220);
+    }
+
+    overlay.querySelector('.modal-close').addEventListener('click', () => close(null));
+    overlay.querySelector('.modal-cancel').addEventListener('click', async () => {
+      close('main-only');
+      await performInstall(parentProject, parentVersion, []);
+    });
+    overlay.querySelector('.modal-confirm').addEventListener('click', async () => {
+      const checked = Array.from(overlay.querySelectorAll('.dep-check:checked'));
+      const selectedSlugs = checked.map((c) => c.value);
+      const selectedDeps = deps.filter((d) => selectedSlugs.includes(d.project.slug) && d.version);
+      close('with-deps');
+      await performInstall(parentProject, parentVersion, selectedDeps);
+    });
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close(null);
+    });
+  });
+}
+
+function depRowHTML(d) {
+  const cover = d.project.icon_url
+    ? `style="background-image:url('${escapeHtml(d.project.icon_url)}');"`
+    : '';
+  const versionText = d.version?.version_number || (d.version?.game_versions?.[0] ? `MC ${d.version.game_versions[0]}` : '');
+  const noVersion = !d.version;
+  const required = d.required;
+
+  return `
+    <label class="dep-row${noVersion ? ' dep-disabled' : ''}">
+      <input type="checkbox" class="dep-check" value="${escapeHtml(d.project.slug)}"
+             ${required && !noVersion ? 'checked' : ''}
+             ${noVersion ? 'disabled' : ''}>
+      <div class="dep-cover" ${cover}></div>
+      <div class="dep-info">
+        <div class="dep-title">${escapeHtml(d.project.title)}</div>
+        <div class="dep-meta">
+          ${required ? '<span class="dep-tag dep-tag-required">обязательно</span>' : '<span class="dep-tag dep-tag-optional">опционально</span>'}
+          ${versionText ? `<span>${escapeHtml(versionText)}</span>` : ''}
+          ${noVersion ? '<span class="dep-tag dep-tag-warn">нет совместимой</span>' : ''}
+        </div>
+      </div>
+    </label>
+  `;
+}
+
+function openVersionPicker(project, versions) {
+  const installedVersionId = state.installed[project.slug]?.versionId;
+
+  // Сортируем: release > beta > alpha; внутри — по date_published desc
+  const typeOrder = { release: 0, beta: 1, alpha: 2 };
+  const sorted = [...versions].sort((a, b) => {
+    const ta = typeOrder[a.version_type] ?? 3;
+    const tb = typeOrder[b.version_type] ?? 3;
+    if (ta !== tb) return ta - tb;
+    return new Date(b.date_published || 0) - new Date(a.date_published || 0);
+  });
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-versions">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">${escapeHtml(project.title)}</div>
+          <div class="modal-sub-line">Выбери версию для установки</div>
+        </div>
+        <button class="modal-close" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="version-filter-row">
+        <input type="text" class="input v-search" placeholder="Поиск по версии или MC…">
+        <select class="input v-loader-filter">
+          <option value="">Все загрузчики</option>
+          <option value="fabric">Fabric</option>
+          <option value="forge">Forge</option>
+          <option value="quilt">Quilt</option>
+          <option value="neoforge">NeoForge</option>
+        </select>
+      </div>
+
+      <div class="version-list">
+        ${sorted.map((v) => versionRowHTML(v, installedVersionId)).join('')}
+      </div>
+
+      <div class="modal-actions">
+        <span class="version-hint">${sorted.length} версий доступно</span>
+        <button class="btn btn-ghost btn-small modal-cancel">Закрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  function close() {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 220);
+  }
+
+  overlay.querySelector('.modal-close').addEventListener('click', close);
+  overlay.querySelector('.modal-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  // Фильтрация
+  const search = overlay.querySelector('.v-search');
+  const loaderFilter = overlay.querySelector('.v-loader-filter');
+  function applyFilter() {
+    const q = search.value.toLowerCase().trim();
+    const ldr = loaderFilter.value;
+    overlay.querySelectorAll('.v-row').forEach((row) => {
+      const text = row.dataset.search;
+      const loaders = (row.dataset.loaders || '').split(',');
+      const matchQ = !q || text.includes(q);
+      const matchL = !ldr || loaders.includes(ldr);
+      row.style.display = matchQ && matchL ? '' : 'none';
+    });
+  }
+  search.addEventListener('input', applyFilter);
+  loaderFilter.addEventListener('change', applyFilter);
+
+  // Клик по строке = установка
+  overlay.querySelectorAll('.v-row').forEach((row) => {
+    const btn = row.querySelector('.v-install');
+    btn.addEventListener('click', async () => {
+      const versionId = row.dataset.versionId;
+      const v = sorted.find((x) => x.id === versionId);
+      if (!v) return;
+      close();
+      await doInstall(project, v);
+    });
+  });
+}
+
+function versionRowHTML(v, installedVersionId) {
+  const versionTypes = {
+    release: { label: 'Release', cls: 'vt-release' },
+    beta: { label: 'Beta', cls: 'vt-beta' },
+    alpha: { label: 'Alpha', cls: 'vt-alpha' },
+  };
+  const vt = versionTypes[v.version_type] || { label: v.version_type || 'Unknown', cls: '' };
+  const date = v.date_published ? new Date(v.date_published).toLocaleDateString('ru-RU', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+  const downloads = v.downloads ? formatDownloads(v.downloads) : '';
+  const gameVersions = (v.game_versions || []).slice(0, 3).join(', ') + (v.game_versions?.length > 3 ? '…' : '');
+  const loaders = (v.loaders || []).join(', ');
+  const isInstalled = installedVersionId === v.id;
+  const searchText = `${v.version_number || ''} ${v.name || ''} ${(v.game_versions || []).join(' ')}`.toLowerCase();
+
+  return `
+    <div class="v-row${isInstalled ? ' v-installed' : ''}"
+         data-version-id="${escapeHtml(v.id)}"
+         data-loaders="${escapeHtml((v.loaders || []).join(','))}"
+         data-search="${escapeHtml(searchText)}">
+      <div class="v-info">
+        <div class="v-line">
+          <span class="v-num">${escapeHtml(v.version_number || v.name || '?')}</span>
+          <span class="v-type ${vt.cls}">${vt.label}</span>
+          ${isInstalled ? '<span class="v-current">текущая</span>' : ''}
+        </div>
+        <div class="v-meta">
+          ${gameVersions ? `<span>MC ${escapeHtml(gameVersions)}</span>` : ''}
+          ${loaders ? `<span>${escapeHtml(loaders)}</span>` : ''}
+          ${date ? `<span>${escapeHtml(date)}</span>` : ''}
+          ${downloads ? `<span>↓ ${downloads}</span>` : ''}
+        </div>
+      </div>
+      <button class="btn ${isInstalled ? 'btn-ghost' : 'btn-primary'} btn-small v-install">
+        ${isInstalled ? 'Переустановить' : 'Установить'}
+      </button>
+    </div>
+  `;
+}
+
+function formatDownloads(n) {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(n);
 }
 
 /* ===================== Library ===================== */

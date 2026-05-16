@@ -6,6 +6,7 @@
         content="default-src 'self'; img-src 'self' https: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https:;">
   <title>GlassCraft</title>
   <link rel="stylesheet" href="styles/fonts.css">
+  <link rel="stylesheet" href="styles/themes.css">
   <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
@@ -236,6 +237,82 @@
               <div class="settings-row">
                 <label>Максимум памяти</label>
                 <input type="text" id="settingsMemMax" class="input" placeholder="4G">
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <div class="block-title">
+              Тема оформления
+              <span class="block-sub">Стиль интерфейса лаунчера</span>
+            </div>
+            <div class="theme-grid">
+              <button class="theme-card" data-theme-pick="glass">
+                <div class="theme-preview tp-glass">
+                  <div class="tp-bar"></div>
+                  <div class="tp-pill"></div>
+                </div>
+                <div class="theme-name">Liquid Glass</div>
+                <div class="theme-desc">Системный акрил Apple</div>
+              </button>
+              <button class="theme-card" data-theme-pick="flat-dark">
+                <div class="theme-preview tp-flat-dark">
+                  <div class="tp-bar"></div>
+                  <div class="tp-pill"></div>
+                </div>
+                <div class="theme-name">Flat Dark</div>
+                <div class="theme-desc">Плоская тёмная</div>
+              </button>
+              <button class="theme-card" data-theme-pick="flat-light">
+                <div class="theme-preview tp-flat-light">
+                  <div class="tp-bar"></div>
+                  <div class="tp-pill"></div>
+                </div>
+                <div class="theme-name">Flat Light</div>
+                <div class="theme-desc">Светлая в стиле iOS</div>
+              </button>
+              <button class="theme-card" data-theme-pick="midnight">
+                <div class="theme-preview tp-midnight">
+                  <div class="tp-bar"></div>
+                  <div class="tp-pill"></div>
+                </div>
+                <div class="theme-name">Midnight</div>
+                <div class="theme-desc">Чёрная с фиолетовым</div>
+              </button>
+              <button class="theme-card" data-theme-pick="sunset">
+                <div class="theme-preview tp-sunset">
+                  <div class="tp-bar"></div>
+                  <div class="tp-pill"></div>
+                </div>
+                <div class="theme-name">Sunset</div>
+                <div class="theme-desc">Тёплая оранжевая</div>
+              </button>
+              <button class="theme-card theme-card-custom" data-theme-pick="custom">
+                <div class="theme-preview tp-custom">
+                  <span class="tp-custom-plus">+</span>
+                </div>
+                <div class="theme-name">Своя</div>
+                <div class="theme-desc">Настроить вручную</div>
+              </button>
+            </div>
+            <div id="customThemeEditor" class="custom-theme-editor" hidden>
+              <div class="settings-grid">
+                <div class="settings-row">
+                  <label>Цвет акцента</label>
+                  <input type="color" id="customAccent" class="input color-input" value="#0a84ff">
+                </div>
+                <div class="settings-row">
+                  <label>Цвет фона</label>
+                  <input type="color" id="customBg" class="input color-input" value="#15151b">
+                </div>
+                <div class="settings-row">
+                  <label>Цвет текста</label>
+                  <input type="color" id="customText" class="input color-input" value="#ffffff">
+                </div>
+                <div class="settings-row">
+                  <label>Прозрачность фона</label>
+                  <input type="range" id="customBgAlpha" class="input range-input" min="0" max="100" value="100">
+                </div>
               </div>
             </div>
           </div>

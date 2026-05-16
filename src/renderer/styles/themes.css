@@ -1,0 +1,639 @@
+/* ============================================================ */
+/* THEMES                                                        */
+/* ============================================================ */
+
+/* Default — Liquid Glass с акрилом (то что есть сейчас)
+   Применяется когда data-theme не задан или = "glass". */
+[data-theme="glass"], :root {
+  --text: rgba(255,255,255,0.96);
+  --text-dim: rgba(255,255,255,0.62);
+  --text-mute: rgba(255,255,255,0.40);
+
+  --accent: #0a84ff;
+  --accent-hover: #2b9bff;
+
+  --stroke: rgba(255,255,255,0.16);
+  --stroke-soft: rgba(255,255,255,0.08);
+
+  --fill: rgba(255,255,255,0.05);
+  --fill-hover: rgba(255,255,255,0.10);
+  --fill-active: rgba(255,255,255,0.16);
+
+  --green: #30d158;
+
+  --shell-bg: rgba(20, 20, 28, 0.20);
+  --shell-border: rgba(255,255,255,0.10);
+  --shell-shadow-inset: inset 0 1px 0 rgba(255,255,255,0.10);
+  --bg-extra: transparent;
+}
+
+/* Flat dark — без акрила, плотный тёмный фон */
+[data-theme="flat-dark"] {
+  --text: rgba(255,255,255,0.95);
+  --text-dim: rgba(255,255,255,0.55);
+  --text-mute: rgba(255,255,255,0.35);
+
+  --accent: #0a84ff;
+  --accent-hover: #2b9bff;
+
+  --stroke: rgba(255,255,255,0.08);
+  --stroke-soft: rgba(255,255,255,0.05);
+
+  --fill: rgba(255,255,255,0.04);
+  --fill-hover: rgba(255,255,255,0.07);
+  --fill-active: rgba(255,255,255,0.10);
+
+  --green: #34c759;
+
+  --shell-bg: #15151b;
+  --shell-border: rgba(255,255,255,0.06);
+  --shell-shadow-inset: none;
+  --bg-extra: #15151b;
+}
+
+/* Flat light — белая тема в стиле iOS Settings */
+[data-theme="flat-light"] {
+  --text: #1c1c1e;
+  --text-dim: rgba(0,0,0,0.55);
+  --text-mute: rgba(0,0,0,0.35);
+
+  --accent: #007aff;
+  --accent-hover: #0a84ff;
+
+  --stroke: rgba(0,0,0,0.10);
+  --stroke-soft: rgba(0,0,0,0.06);
+
+  --fill: rgba(0,0,0,0.04);
+  --fill-hover: rgba(0,0,0,0.07);
+  --fill-active: rgba(0,0,0,0.10);
+
+  --green: #28c840;
+
+  --shell-bg: #f5f5f7;
+  --shell-border: rgba(0,0,0,0.10);
+  --shell-shadow-inset: none;
+  --bg-extra: #f5f5f7;
+}
+
+/* Midnight — глубокий чёрный с фиолетовым акцентом */
+[data-theme="midnight"] {
+  --text: rgba(255,255,255,0.95);
+  --text-dim: rgba(255,255,255,0.55);
+  --text-mute: rgba(255,255,255,0.32);
+
+  --accent: #bf5af2;
+  --accent-hover: #d27cf7;
+
+  --stroke: rgba(255,255,255,0.10);
+  --stroke-soft: rgba(255,255,255,0.05);
+
+  --fill: rgba(255,255,255,0.05);
+  --fill-hover: rgba(255,255,255,0.08);
+  --fill-active: rgba(255,255,255,0.12);
+
+  --green: #30d158;
+
+  --shell-bg: #0a0a14;
+  --shell-border: rgba(191,90,242,0.15);
+  --shell-shadow-inset: inset 0 1px 0 rgba(191,90,242,0.10);
+  --bg-extra: #0a0a14;
+}
+
+/* Sunset — тёплая палитра с оранжево-розовым акцентом */
+[data-theme="sunset"] {
+  --text: rgba(255,255,255,0.95);
+  --text-dim: rgba(255,255,255,0.62);
+  --text-mute: rgba(255,255,255,0.40);
+
+  --accent: #ff9f0a;
+  --accent-hover: #ffb340;
+
+  --stroke: rgba(255,159,10,0.18);
+  --stroke-soft: rgba(255,255,255,0.06);
+
+  --fill: rgba(255,255,255,0.04);
+  --fill-hover: rgba(255,255,255,0.08);
+  --fill-active: rgba(255,159,10,0.16);
+
+  --green: #30d158;
+
+  --shell-bg: rgba(36, 18, 26, 0.55);
+  --shell-border: rgba(255,159,10,0.18);
+  --shell-shadow-inset: inset 0 1px 0 rgba(255,255,255,0.08);
+  --bg-extra: linear-gradient(135deg, #1a0a12 0%, #2a0e1c 50%, #3a1418 100%);
+}
+
+/* Применяем shell-фон через переменные */
+.shell {
+  background: var(--shell-bg);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--shell-shadow-inset);
+}
+
+/* Тематический фон тела (для flat-* и midnight окно стало не прозрачное)
+   Liquid-glass — bg-extra прозрачен, акрил Windows работает напрямую. */
+body[data-theme="flat-dark"],
+body[data-theme="flat-light"],
+body[data-theme="midnight"] {
+  background: var(--bg-extra);
+}
+
+body[data-theme="sunset"] {
+  background: var(--bg-extra);
+}
+
+/* В flat-light особое поведение тёмных подложек: сделаем их светлыми */
+[data-theme="flat-light"] .glass-input,
+[data-theme="flat-light"] .input,
+[data-theme="flat-light"] select.input option {
+  color: var(--text);
+}
+[data-theme="flat-light"] select.input {
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(0,0,0,0.45) 50%),
+    linear-gradient(-45deg, transparent 50%, rgba(0,0,0,0.45) 50%);
+}
+[data-theme="flat-light"] select.input option {
+  background: #ffffff;
+  color: #1c1c1e;
+}
+[data-theme="flat-light"] .toast {
+  background: rgba(255,255,255,0.92);
+  color: #1c1c1e;
+  border-color: rgba(0,0,0,0.10);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+}
+[data-theme="flat-light"] .modal {
+  background: rgba(255,255,255,0.96);
+  color: #1c1c1e;
+}
+[data-theme="flat-light"] .modal-overlay {
+  background: rgba(0,0,0,0.30);
+}
+[data-theme="flat-light"] .wc-min,
+[data-theme="flat-light"] .wc-max,
+[data-theme="flat-light"] .wc-close {
+  /* macOS-style traffic lights хорошо смотрятся и на светлом */
+}
+[data-theme="flat-light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.18);
+}
+[data-theme="flat-light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.28);
+}
+
+/* Кастомная тема — переменные приходят от пользователя через data-attribute или style. */
+
+
+/* ============================================================ */
+/* THEME PICKER UI                                               */
+/* ============================================================ */
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--stroke-soft);
+  border-radius: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+.theme-card:hover {
+  border-color: var(--stroke);
+  transform: translateY(-1px);
+}
+.theme-card.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+[data-theme="flat-light"] .theme-card {
+  background: rgba(0,0,0,0.03);
+}
+[data-theme="flat-light"] .theme-card:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+/* Preview — отдельный block с реальной разметкой кнопки и полосок,
+   а не псевдоэлементами на самом контейнере (это ломало layout). */
+.theme-preview {
+  position: relative;
+  height: 70px;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.08);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 8px 10px;
+  gap: 6px;
+}
+.theme-preview .tp-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.30);
+}
+.theme-preview .tp-pill {
+  width: 32px;
+  height: 8px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.20);
+}
+
+.tp-glass {
+  background:
+    linear-gradient(135deg, rgba(94,92,230,0.45) 0%, rgba(10,132,255,0.45) 50%, rgba(255,55,95,0.35) 100%),
+    rgba(20,20,28,0.55);
+}
+
+.tp-flat-dark { background: #15151b; }
+.tp-flat-dark .tp-bar { background: rgba(255,255,255,0.10); }
+.tp-flat-dark .tp-pill { background: #0a84ff; }
+
+.tp-flat-light { background: #f5f5f7; border-color: rgba(0,0,0,0.10); }
+.tp-flat-light .tp-bar { background: rgba(0,0,0,0.10); }
+.tp-flat-light .tp-pill { background: #007aff; }
+
+.tp-midnight { background: #0a0a14; border-color: rgba(191,90,242,0.30); }
+.tp-midnight .tp-bar { background: rgba(255,255,255,0.10); }
+.tp-midnight .tp-pill { background: #bf5af2; }
+
+.tp-sunset { background: linear-gradient(135deg, #1a0a12 0%, #2a0e1c 50%, #3a1418 100%); }
+.tp-sunset .tp-bar { background: rgba(255,159,10,0.50); }
+.tp-sunset .tp-pill { background: #ff9f0a; }
+
+.tp-custom {
+  background: repeating-linear-gradient(45deg,
+    rgba(255,255,255,0.04) 0,
+    rgba(255,255,255,0.04) 8px,
+    rgba(255,255,255,0.08) 8px,
+    rgba(255,255,255,0.08) 16px);
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+}
+.tp-custom-plus {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text-dim);
+  line-height: 1;
+}
+
+.theme-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.theme-desc {
+  font-size: 10px;
+  color: var(--text-mute);
+}
+
+.custom-theme-editor {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--stroke-soft);
+}
+.color-input {
+  height: 36px;
+  padding: 3px;
+  cursor: pointer;
+}
+.color-input::-webkit-color-swatch-wrapper { padding: 0; }
+.color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 6px;
+}
+.range-input {
+  height: 36px;
+  padding: 0 4px;
+  background: transparent;
+  border: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+}
+.range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--fill);
+  border-radius: 3px;
+  border: 1px solid var(--stroke-soft);
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: -6px;
+  cursor: pointer;
+}
+
+
+/* ============================================================ */
+/* LIGHT THEME OVERRIDES (читаемость на белом)                   */
+/* ============================================================ */
+
+[data-theme="flat-light"] {
+  /* Стрелки select-ов — чёрные вместо белых */
+}
+
+[data-theme="flat-light"] select.input {
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(0,0,0,0.50) 50%),
+    linear-gradient(-45deg, transparent 50%, rgba(0,0,0,0.50) 50%) !important;
+}
+
+/* Все полупрозрачные белые подложки → чёрные */
+[data-theme="flat-light"] .lib-row:hover,
+[data-theme="flat-light"] .cv-row:hover,
+[data-theme="flat-light"] .v-row:hover,
+[data-theme="flat-light"] .dep-row:hover,
+[data-theme="flat-light"] .java-row:hover {
+  background: rgba(0,0,0,0.04);
+}
+[data-theme="flat-light"] .cv-row,
+[data-theme="flat-light"] .java-row,
+[data-theme="flat-light"] .v-row {
+  background: rgba(0,0,0,0.02);
+}
+[data-theme="flat-light"] .empty-small {
+  background: rgba(0,0,0,0.02);
+  border-color: rgba(0,0,0,0.12);
+}
+[data-theme="flat-light"] .lib-icon {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-dim);
+}
+[data-theme="flat-light"] .progress-bar,
+[data-theme="flat-light"] .j-progress {
+  background: rgba(0,0,0,0.08);
+}
+[data-theme="flat-light"] .item-progress {
+  background: rgba(0,0,0,0.06);
+}
+[data-theme="flat-light"] .version-list,
+[data-theme="flat-light"] .dep-list {
+  background: rgba(0,0,0,0.02);
+}
+[data-theme="flat-light"] .version-list::-webkit-scrollbar-thumb,
+[data-theme="flat-light"] .dep-list::-webkit-scrollbar-thumb,
+[data-theme="flat-light"] .content::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.18);
+}
+[data-theme="flat-light"] .content::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,0.28);
+}
+
+/* Карточки модов — на белом нужна светлая подложка с тенью */
+[data-theme="flat-light"] .item-card {
+  background: rgba(0,0,0,0.02);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+[data-theme="flat-light"] .item-card:hover {
+  background: rgba(0,0,0,0.04);
+  box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+}
+[data-theme="flat-light"] .item-card.is-installed {
+  border-color: rgba(40,200,64,0.35);
+}
+
+/* Settings блоки */
+[data-theme="flat-light"] .settings-block,
+[data-theme="flat-light"] .library-list,
+[data-theme="flat-light"] .filters,
+[data-theme="flat-light"] .tabs {
+  background: rgba(0,0,0,0.02);
+}
+
+/* Eyebrows и метки — должны иметь нормальный контраст */
+[data-theme="flat-light"] .play-eyebrow,
+[data-theme="flat-light"] .play-sub,
+[data-theme="flat-light"] .page-sub,
+[data-theme="flat-light"] .item-meta,
+[data-theme="flat-light"] .item-desc,
+[data-theme="flat-light"] .lib-size,
+[data-theme="flat-light"] .cv-meta,
+[data-theme="flat-light"] .java-use,
+[data-theme="flat-light"] .v-meta,
+[data-theme="flat-light"] .dep-meta,
+[data-theme="flat-light"] .settings-row label,
+[data-theme="flat-light"] .form-row > label,
+[data-theme="flat-light"] .select-wrap label,
+[data-theme="flat-light"] .modal-sub,
+[data-theme="flat-light"] .modal-sub-line,
+[data-theme="flat-light"] .version-hint,
+[data-theme="flat-light"] .theme-desc,
+[data-theme="flat-light"] .block-sub {
+  color: rgba(0,0,0,0.55) !important;
+}
+
+/* Зелёный бейдж на светлом — менее ядовитый */
+[data-theme="flat-light"] .badge-green {
+  background: rgba(40,200,64,0.15);
+  color: #1d7a31;
+  border-color: rgba(40,200,64,0.40);
+}
+[data-theme="flat-light"] .installed-badge {
+  background: rgba(40,200,64,0.15);
+  color: #1d7a31;
+  border-color: rgba(40,200,64,0.40);
+}
+[data-theme="flat-light"] .installed-version {
+  color: #1d7a31;
+}
+[data-theme="flat-light"] .vt-release {
+  background: rgba(40,200,64,0.15);
+  color: #1d7a31;
+  border-color: rgba(40,200,64,0.35);
+}
+[data-theme="flat-light"] .vt-beta {
+  background: rgba(255,159,10,0.18);
+  color: #8a5300;
+  border-color: rgba(255,159,10,0.40);
+}
+[data-theme="flat-light"] .vt-alpha {
+  background: rgba(255,55,95,0.15);
+  color: #b3002a;
+  border-color: rgba(255,55,95,0.30);
+}
+[data-theme="flat-light"] .v-current {
+  background: rgba(0,122,255,0.15);
+  color: #0a4a8c;
+  border-color: rgba(0,122,255,0.40);
+}
+[data-theme="flat-light"] .dep-tag-required {
+  background: rgba(255,55,95,0.12);
+  color: #b3002a;
+  border-color: rgba(255,55,95,0.30);
+}
+[data-theme="flat-light"] .dep-tag-optional {
+  background: rgba(0,122,255,0.12);
+  color: #0a4a8c;
+  border-color: rgba(0,122,255,0.30);
+}
+[data-theme="flat-light"] .dep-tag-warn {
+  background: rgba(255,159,10,0.18);
+  color: #8a5300;
+  border-color: rgba(255,159,10,0.40);
+}
+
+/* Pill «Готов» в hero */
+[data-theme="flat-light"] .play-eyebrow .dot-green {
+  background: #28c840;
+  box-shadow: 0 0 6px rgba(40,200,64,0.4);
+}
+
+/* Бренд-логотип в titlebar — drop-shadow на белом не виден */
+[data-theme="flat-light"] .brand-logo {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.18));
+}
+[data-theme="flat-light"] .brand {
+  color: rgba(0,0,0,0.85);
+}
+
+/* Title-bar граница заметнее на светлом */
+[data-theme="flat-light"] .titlebar {
+  border-bottom-color: rgba(0,0,0,0.08);
+}
+[data-theme="flat-light"] .sidebar {
+  border-right-color: rgba(0,0,0,0.08);
+}
+[data-theme="flat-light"] .lib-row {
+  border-bottom-color: rgba(0,0,0,0.06);
+}
+
+/* Toast — белая на светлой теме была в .modal, но не для toast */
+[data-theme="flat-light"] .play-progress,
+[data-theme="flat-light"] .progress-fill,
+[data-theme="flat-light"] .item-progress-fill,
+[data-theme="flat-light"] .j-progress-fill {
+  background: var(--accent);
+}
+
+/* User-name + статус */
+[data-theme="flat-light"] .user-name,
+[data-theme="flat-light"] .play-title,
+[data-theme="flat-light"] .page-title,
+[data-theme="flat-light"] .modal-title,
+[data-theme="flat-light"] .block-title,
+[data-theme="flat-light"] .v-num,
+[data-theme="flat-light"] .lib-name,
+[data-theme="flat-light"] .item-title,
+[data-theme="flat-light"] .cv-name,
+[data-theme="flat-light"] .java-version,
+[data-theme="flat-light"] .dep-title,
+[data-theme="flat-light"] .theme-name {
+  color: rgba(0,0,0,0.92);
+}
+[data-theme="flat-light"] .user-status {
+  color: rgba(0,0,0,0.50);
+}
+
+/* Fabric / Loader-tab активный должен оставаться синим */
+[data-theme="flat-light"] .loader-tab {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.10);
+  color: rgba(0,0,0,0.60);
+}
+[data-theme="flat-light"] .loader-tab.active {
+  background: rgba(0,122,255,0.12);
+  color: #0a4a8c;
+  border-color: rgba(0,122,255,0.40);
+}
+
+/* Кнопки ghost на светлом */
+[data-theme="flat-light"] .btn-ghost {
+  background: rgba(0,0,0,0.04);
+  border-color: rgba(0,0,0,0.12);
+  color: var(--text);
+}
+[data-theme="flat-light"] .btn-ghost:hover:not(:disabled) {
+  background: rgba(0,0,0,0.07);
+}
+
+/* Lib delete и cv delete — иконки */
+[data-theme="flat-light"] .lib-delete,
+[data-theme="flat-light"] .cv-delete {
+  color: rgba(0,0,0,0.45);
+}
+[data-theme="flat-light"] .lib-delete:hover,
+[data-theme="flat-light"] .cv-delete:hover {
+  background: rgba(255,55,95,0.10);
+  color: #b3002a;
+}
+[data-theme="flat-light"] .modal-close {
+  color: rgba(0,0,0,0.55);
+}
+[data-theme="flat-light"] .modal-close:hover {
+  background: rgba(0,0,0,0.06);
+  color: rgba(0,0,0,0.85);
+}
+
+/* Search input icon в светлой теме */
+[data-theme="flat-light"] .input-icon {
+  color: rgba(0,0,0,0.40);
+}
+
+/* Tray status / tooltips на брэнде */
+[data-theme="flat-light"] .nav-item:hover {
+  background: rgba(0,0,0,0.04);
+}
+[data-theme="flat-light"] .nav-item.active {
+  background: rgba(0,122,255,0.10);
+  color: #0a4a8c;
+}
+[data-theme="flat-light"] .tab.active {
+  background: rgba(0,0,0,0.06);
+  color: rgba(0,0,0,0.85);
+}
+
+/* Карточки тем на светлом */
+[data-theme="flat-light"] .theme-preview {
+  border-color: rgba(0,0,0,0.10);
+}
+[data-theme="flat-light"] .tp-glass {
+  /* пусть остаётся таким же, это превью */
+}
+
+/* Code блоки */
+[data-theme="flat-light"] code {
+  background: rgba(0,0,0,0.06);
+  color: rgba(0,0,0,0.80);
+}
+
+/* Progress text */
+[data-theme="flat-light"] .progress-text {
+  color: rgba(0,0,0,0.55);
+}
+
+
+/* ============================================================ */
+/* color-scheme — чтобы нативные виджеты (select dropdown,       */
+/* scrollbar, input clear button) рендерились в правильной теме  */
+/* ============================================================ */
+
+[data-theme="glass"],
+[data-theme="flat-dark"],
+[data-theme="midnight"],
+[data-theme="sunset"] {
+  color-scheme: dark;
+}
+
+[data-theme="flat-light"] {
+  color-scheme: light;
+}

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles/fonts.css">
   <link rel="stylesheet" href="styles/themes.css">
   <link rel="stylesheet" href="styles/main.css">
+  <script src="i18n.js"></script>
 </head>
 <body>
   <div class="shell">
@@ -43,6 +44,10 @@
           <button class="nav-item" data-page="shaders">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/></svg>
             <span>Шейдеры</span>
+          </button>
+          <button class="nav-item" data-page="modpacks">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9 5 9-5"/><path d="M3 7l9-5 9 5v10l-9 5-9-5V7z"/><path d="M3 12l9 5 9-5"/></svg>
+            <span data-i18n="nav.modpacks">Модпаки</span>
           </button>
           <button class="nav-item" data-page="library">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
@@ -182,6 +187,31 @@
           <div class="grid" data-grid="shader"></div>
         </div>
 
+        <!-- MODPACKS -->
+        <div class="page" data-page="modpacks" hidden>
+          <h2 class="page-title" data-i18n="nav.modpacks">Модпаки</h2>
+          <p class="page-sub" data-i18n="page.modpacks.sub">Готовые сборки модов</p>
+          <div class="filters">
+            <div class="input-with-icon search-wrap">
+              <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" class="input search" data-search="modpack" data-i18n-placeholder="search.modpacks" placeholder="Поиск модпаков">
+            </div>
+            <select class="input" data-version-filter="modpack"><option value="" data-i18n="search.allVersions">Все версии</option></select>
+            <select class="input" data-loader-filter="modpack">
+              <option value="" data-i18n="search.allLoaders">Все загрузчики</option>
+              <option value="fabric">Fabric</option>
+              <option value="forge">Forge</option>
+              <option value="quilt">Quilt</option>
+              <option value="neoforge">NeoForge</option>
+            </select>
+            <button class="btn btn-ghost btn-small" id="importMrpackBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <span data-i18n="modpack.import">Импорт .mrpack</span>
+            </button>
+          </div>
+          <div class="grid" data-grid="modpack"></div>
+        </div>
+
         <!-- LIBRARY -->
         <div class="page" data-page="library" hidden>
           <h2 class="page-title">Библиотека</h2>
@@ -243,8 +273,21 @@
 
           <div class="settings-block">
             <div class="block-title">
-              Тема оформления
-              <span class="block-sub">Стиль интерфейса лаунчера</span>
+              <span data-i18n="settings.lang">Язык</span>
+              <span class="block-sub" data-i18n="settings.langSub">Language / Язык</span>
+            </div>
+            <div class="settings-row">
+              <select id="settingsLang" class="input">
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <div class="block-title">
+              <span data-i18n="settings.theme">Тема оформления</span>
+              <span class="block-sub" data-i18n="settings.themeSub">Стиль интерфейса лаунчера</span>
             </div>
             <div class="theme-grid">
               <button class="theme-card" data-theme-pick="glass">
@@ -336,23 +379,110 @@
           </div>
 
           <div class="settings-block">
-            <div class="block-title">Папки</div>
+            <div class="block-title" data-i18n="settings.folders">Папки</div>
             <div class="settings-row">
-              <label>Игровая директория</label>
+              <label data-i18n="settings.gameDir">Игровая директория</label>
               <input type="text" id="settingsGameDir" class="input">
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <div class="block-title" data-i18n="settings.advanced">Дополнительно</div>
+
+            <div class="settings-row">
+              <label data-i18n="settings.windowMode">Режим окна Minecraft</label>
+              <select id="settingsWindowMode" class="input">
+                <option value="windowed" data-i18n="settings.windowed">Окно</option>
+                <option value="fullscreen" data-i18n="settings.fullscreen">Полный экран</option>
+              </select>
+            </div>
+
+            <div class="settings-grid">
+              <div class="settings-row">
+                <label data-i18n="settings.windowSize">Размер окна (Ш×В)</label>
+                <input type="text" id="settingsWindowSize" class="input" placeholder="854x480">
+              </div>
+              <div class="settings-row">
+                <label data-i18n="settings.jvmArgs">JVM аргументы</label>
+                <input type="text" id="settingsJvmArgs" class="input" placeholder="-XX:+UseG1GC -XX:+ParallelRefProcEnabled">
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <label class="check-label">
+                <input type="checkbox" id="settingsDebugConsole">
+                <span data-i18n="settings.debugConsole">Показывать консоль отладки при запуске</span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="check-label">
+                <input type="checkbox" id="settingsAutoCleanLogs">
+                <span data-i18n="settings.autoCleanLogs">Авто-очистка старых логов</span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="check-label">
+                <input type="checkbox" id="settingsNotifications">
+                <span>Системные уведомления Windows</span>
+              </label>
+            </div>
+            <div class="settings-row">
+              <label class="check-label">
+                <input type="checkbox" id="settingsAutoUpdate">
+                <span data-i18n="settings.autoUpdate">Автопроверка обновлений лаунчера</span>
+              </label>
+            </div>
+            <div class="settings-row-actions">
+              <button class="btn btn-ghost btn-small" id="checkUpdateBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span data-i18n="settings.checkUpdate">Проверить обновление</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-block">
+            <div class="block-title" data-i18n="settings.about">О лаунчере</div>
+            <div class="about-block">
+              <div class="about-logo"></div>
+              <div class="about-info">
+                <div class="about-name">GlassCraft</div>
+                <div class="about-ver" id="aboutVersion">0.0.0</div>
+                <div class="about-tag" data-i18n="about.tagline">Minecraft-лаунчер в стиле Apple Liquid Glass</div>
+                <div class="about-links">
+                  <a href="#" id="aboutRepo" data-i18n="about.repo">Исходники</a>
+                  <span class="about-dot">·</span>
+                  <a href="#" id="aboutReport" data-i18n="about.report">Сообщить об ошибке</a>
+                  <span class="about-dot">·</span>
+                  <span data-i18n="about.license">MIT License</span>
+                </div>
+                <div class="about-disclaimer" data-i18n="about.disclaimer">Minecraft is a trademark of Mojang Studios. Not affiliated.</div>
+              </div>
             </div>
           </div>
 
           <div class="settings-actions">
             <button class="btn btn-primary" id="saveSettings">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              Сохранить
+              <span data-i18n="btn.save">Сохранить</span>
             </button>
             <span class="settings-hint" id="settingsHint"></span>
           </div>
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Update banner -->
+  <div class="update-banner" id="updateBanner" hidden>
+    <div class="update-icon">↑</div>
+    <div class="update-text">
+      <div class="update-title" data-i18n="update.available">Доступна новая версия</div>
+      <div class="update-sub" id="updateSub"></div>
+    </div>
+    <button class="btn btn-primary btn-small" id="updateOpenBtn" data-i18n="update.openPage">Открыть страницу</button>
+    <button class="update-dismiss" id="updateDismiss" aria-label="Закрыть">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
   </div>
 
   <div class="toast" id="toast"></div>

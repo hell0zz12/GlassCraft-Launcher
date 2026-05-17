@@ -59,4 +59,22 @@ contextBridge.exposeInMainWorld('api', {
 
   // Game control
   stopGame: () => ipcRenderer.invoke('app:stopGame'),
+
+  // App / updates
+  getAppVersion: () => ipcRenderer.invoke('app:getVersion'),
+  checkUpdates: () => ipcRenderer.invoke('app:checkUpdates'),
+  openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
+  cleanLogs: () => ipcRenderer.invoke('app:cleanLogs'),
+  onUpdateAvailable: (cb) => ipcRenderer.on('app:updateAvailable', (_, d) => cb(d)),
+
+  // Notifications
+  notify: (args) => ipcRenderer.invoke('notify', args),
+  setNotifications: (enabled) => ipcRenderer.invoke('notify:setEnabled', enabled),
+
+  // Modpacks
+  searchModpacks: (args) => ipcRenderer.invoke('modrinth:searchModpacks', args),
+  installModpack: (args) => ipcRenderer.invoke('modpack:install', args),
+  importModpackLocal: (args) => ipcRenderer.invoke('modpack:importLocal', args),
+  listModpacks: () => ipcRenderer.invoke('modpacks:list'),
+  onModpackProgress: (cb) => ipcRenderer.on('modpack:progress', (_, d) => cb(d)),
 });

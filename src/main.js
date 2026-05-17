@@ -8,6 +8,7 @@ const AdmZip = require('adm-zip');
 const { Client, Authenticator } = require('minecraft-launcher-core');
 const fetch = require('node-fetch');
 const discord = require('./discord');
+const notifications = require('./notifications');
 
 const launcher = new Client();
 
@@ -17,6 +18,7 @@ const JAVA_DIR = path.join(APP_DIR, 'java');
 const PROFILE_FILE = path.join(APP_DIR, 'profile.json');
 const SETTINGS_FILE = path.join(APP_DIR, 'settings.json');
 const INSTALLED_FILE = path.join(APP_DIR, 'installed.json');
+const MODPACKS_FILE = path.join(APP_DIR, 'modpacks.json');
 const LOG_FILE = path.join(APP_DIR, 'launcher.log');
 
 for (const d of [APP_DIR, MC_DIR, JAVA_DIR]) {
@@ -189,9 +191,22 @@ function stopGame() {
 let forceQuit = false;
 
 app.whenReady().then(() => {
+  // Для нативных Windows toast notifications
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('com.glasscraft.launcher');
+  }
+
   createWindow();
   createTray();
   discord.connect().catch(() => {});
+
+  // Auto-update check (через 5 секунд после старта, чтобы не блокировать UI)
+  setTimeout(() => checkForUpdates(false), 5000);
+
+  // Auto-clean старых логов раз в час
+  setTimeout(() => autoCleanLogs(), 10000);
+  setInterval(() => autoCleanLogs(), 60 * 60 * 1000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -259,10 +274,23 @@ ipcMain.handle('profile:save', (_, profile) => {
 ipcMain.handle('settings:get', () => {
   return readJson(SETTINGS_FILE, {
     memory: { min: '1G', max: '4G' },
+    memoryAuto: true,
     javaPath: '',
+    jvmArgs: '',
     gameDir: MC_DIR,
     loader: 'vanilla',
     loaderVersion: '',
+    windowMode: 'windowed', // 'windowed' | 'fullscreen' | 'borderless'
+    windowWidth: 854,
+    windowHeight: 480,
+    debugConsole: false,
+    autoUpdate: true,
+    autoCleanLogs: true,
+    notifications: true,
+    discordRpc: true,
+    lang: 'ru',
+    theme: 'glass',
+    customTheme: null,
   });
 });
 
@@ -494,16 +522,38 @@ ipcMain.handle('modrinth:versions', async (_, { slug, gameVersion, loader }) => 
 
 // ============ Download helper ============
 async function downloadFile(url, destPath, onProgress) {
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`Download failed: ${res.status} ${url}`);
-
-  const total = parseInt(res.headers.get('content-length') || '0', 10);
-  let received = 0;
-
   await fs.promises.mkdir(path.dirname(destPath), { recursive: true });
-  const fileStream = fs.createWriteStream(destPath);
 
-  return new Promise((resolve, reject) => {
+  // Resume: если файл частично скачан в .part — пробуем продолжить через Range
+  const partPath = `${destPath}.part`;
+  let resumeFrom = 0;
+  if (fs.existsSync(partPath)) {
+    try { resumeFrom = fs.statSync(partPath).size; } catch { resumeFrom = 0; }
+  }
+
+  const headers = {};
+  if (resumeFrom > 0) headers['Range'] = `bytes=${resumeFrom}-`;
+
+  let res = await fetch(url, { redirect: 'follow', headers });
+
+  // Сервер не поддерживает Range — начнём заново
+  if (resumeFrom > 0 && res.status !== 206) {
+    resumeFrom = 0;
+    try { fs.unlinkSync(partPath); } catch {}
+    res = await fetch(url, { redirect: 'follow' });
+  }
+
+  if (!res.ok && res.status !== 206) {
+    throw new Error(`Download failed: ${res.status} ${url}`);
+  }
+
+  const partial = parseInt(res.headers.get('content-length') || '0', 10);
+  const total = partial + resumeFrom;
+  let received = resumeFrom;
+
+  const fileStream = fs.createWriteStream(partPath, { flags: resumeFrom > 0 ? 'a' : 'w' });
+
+  await new Promise((resolve, reject) => {
     res.body.on('data', (chunk) => {
       received += chunk.length;
       if (onProgress) onProgress(total ? received / total : 0, received, total);
@@ -511,7 +561,10 @@ async function downloadFile(url, destPath, onProgress) {
     res.body.pipe(fileStream);
     res.body.on('error', reject);
     fileStream.on('finish', resolve);
+    fileStream.on('error', reject);
   });
+
+  await fs.promises.rename(partPath, destPath);
 }
 
 ipcMain.handle('modrinth:install', async (event, { project, version, gameDir }) => {
@@ -767,12 +820,81 @@ function resolveJava(settings, mcVersion) {
 
 // ============ Launch Minecraft ============
 
+// UUID v3 для offline-режима, как делает сам Minecraft (на основе ника)
 function offlineUuid(name) {
   const hash = crypto.createHash('md5').update(`OfflinePlayer:${name}`).digest();
   hash[6] = (hash[6] & 0x0f) | 0x30;
   hash[8] = (hash[8] & 0x3f) | 0x80;
   const hex = hash.toString('hex');
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+
+// ============ Debug console window ============
+function createDebugConsole() {
+  const win = new BrowserWindow({
+    width: 720,
+    height: 480,
+    title: 'GlassCraft — Debug Console',
+    backgroundColor: '#0a0a14',
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Загружаем простую HTML-консоль через data URL
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Debug</title>
+<style>
+  body { margin: 0; background: #0a0a14; color: #d6d6d8; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  #log { padding: 14px; white-space: pre-wrap; word-break: break-all; height: calc(100vh - 40px); overflow-y: auto; }
+  #toolbar { height: 40px; padding: 0 14px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid rgba(255,255,255,0.10); background: rgba(255,255,255,0.03); }
+  button { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.16); color: #fff; padding: 5px 11px; border-radius: 6px; font: inherit; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,0.14); }
+  .l-debug { color: #8a8a90; }
+  .l-data { color: #d6d6d8; }
+  .l-info { color: #4ea1ff; }
+  .l-error { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <button onclick="document.getElementById('log').textContent = ''">Очистить</button>
+  <span style="margin-left: auto; color: rgba(255,255,255,0.5)">GlassCraft Debug Console</span>
+</div>
+<div id="log"></div>
+<script>
+  const logEl = document.getElementById('log');
+  let autoscroll = true;
+  logEl.addEventListener('scroll', () => {
+    autoscroll = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 30;
+  });
+  window.dbgAppend = (level, line) => {
+    const span = document.createElement('span');
+    span.className = 'l-' + level;
+    span.textContent = (line.endsWith('\\n') ? line : line + '\\n');
+    logEl.appendChild(span);
+    if (autoscroll) logEl.scrollTop = logEl.scrollHeight;
+    // Limit размер
+    if (logEl.childNodes.length > 5000) {
+      while (logEl.childNodes.length > 4000) logEl.removeChild(logEl.firstChild);
+    }
+  };
+</script>
+</body></html>`;
+  win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+  return {
+    append(level, line) {
+      if (win.isDestroyed()) return;
+      const safe = JSON.stringify(String(line));
+      win.webContents.executeJavaScript(`window.dbgAppend(${JSON.stringify(level)}, ${safe})`).catch(() => {});
+    },
+    close() {
+      if (!win.isDestroyed()) win.close();
+    },
+  };
 }
 
 ipcMain.handle('mc:launch', async (event, { version, profile, settings, loader, loaderVersion, isCustom }) => {
@@ -822,19 +944,43 @@ ipcMain.handle('mc:launch', async (event, { version, profile, settings, loader, 
     return { ok: false, error: `Java не найдена. Установи Java ${recommendedJavaForVersion(mcVersionForJava)} во вкладке Настройки → Java.` };
   }
 
+  // Авто-память: используем 50% от свободной (но не больше 8GB и не меньше 2GB)
+  let memMax = settings?.memory?.max || '4G';
+  let memMin = settings?.memory?.min || '1G';
+  if (settings?.memoryAuto) {
+    const totalMb = Math.round(os.totalmem() / 1024 / 1024);
+    const half = Math.round(totalMb / 2);
+    const autoMaxMb = Math.max(2048, Math.min(8192, half));
+    memMax = `${Math.round(autoMaxMb / 1024)}G`;
+    memMin = '1G';
+  }
+
+  // Дополнительные JVM args от пользователя
+  const customArgs = (settings?.jvmArgs || '')
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  // Параметры окна Minecraft
+  const windowOpts = {};
+  if (settings?.windowMode === 'fullscreen') {
+    windowOpts.fullscreen = true;
+  } else {
+    windowOpts.width = settings?.windowWidth || 854;
+    windowOpts.height = settings?.windowHeight || 480;
+  }
+
   const opts = {
     authorization,
     root: gameDir,
     version: { number: mcVersionForJava, type: customManifest?.type || 'release' },
-    memory: {
-      max: settings?.memory?.max || '4G',
-      min: settings?.memory?.min || '1G',
-    },
+    memory: { max: memMax, min: memMin },
     javaPath,
+    customArgs: customArgs.length ? customArgs : undefined,
+    window: windowOpts,
   };
 
-  // Для кастомной версии ставим custom = имя папки. MCLC прочитает её JSON
-  // и автоматически смерджит с базовой версией из inheritsFrom.
+  // Для кастомной версии ставим custom = имя папки.
   if (isCustom) {
     opts.version.custom = version;
     log('Launching custom version', version, 'inherits', mcVersionForJava);
@@ -853,11 +999,25 @@ ipcMain.handle('mc:launch', async (event, { version, profile, settings, loader, 
     }
   }
 
-  log('Launching MC', { version, isCustom, username, root: opts.root, javaPath, loader: loader || 'vanilla', loaderVersion });
+  // Debug-консоль: открываем DevTools-подобное окно с логами Java перед запуском
+  let debugWin = null;
+  if (settings?.debugConsole) {
+    debugWin = createDebugConsole();
+  }
+
+  log('Launching MC', { version, isCustom, username, root: opts.root, javaPath, loader: loader || 'vanilla', loaderVersion, debugConsole: !!debugWin });
 
   launcher.removeAllListeners();
-  launcher.on('debug', (m) => { log('[debug]', m); send('mc:log', { level: 'debug', msg: String(m) }); });
-  launcher.on('data', (m) => { log('[data]', String(m).slice(0, 200)); send('mc:log', { level: 'data', msg: String(m) }); });
+  launcher.on('debug', (m) => {
+    log('[debug]', m);
+    send('mc:log', { level: 'debug', msg: String(m) });
+    debugWin?.append('debug', String(m));
+  });
+  launcher.on('data', (m) => {
+    log('[data]', String(m).slice(0, 200));
+    send('mc:log', { level: 'data', msg: String(m) });
+    debugWin?.append('data', String(m));
+  });
   launcher.on('progress', (p) => send('mc:progress', p));
   launcher.on('download-status', (p) => send('mc:progress', p));
   launcher.on('arguments', () => { log('arguments built'); send('mc:log', { level: 'info', msg: 'Запуск Java' }); });
@@ -868,6 +1028,8 @@ ipcMain.handle('mc:launch', async (event, { version, profile, settings, loader, 
     updateTrayMenu();
     discord.setIdle();
     send('mc:close', c);
+    notifications.notify({ title: 'GlassCraft', body: `Игра закрыта (код ${c})` });
+    debugWin?.append('info', `=== Игра закрыта (код ${c}) ===`);
   });
 
   try {
@@ -877,6 +1039,10 @@ ipcMain.handle('mc:launch', async (event, { version, profile, settings, loader, 
     runningVersion = { version: mcVersionForJava, loader: loader || 'vanilla' };
     updateTrayMenu();
     discord.setInGame(mcVersionForJava, loader || 'vanilla');
+    notifications.notify({
+      title: 'Minecraft запускается',
+      body: `${mcVersionForJava} · ${loader || 'vanilla'}`,
+    });
     return { ok: true };
   } catch (err) {
     log('launch error', err.message, err.stack);
@@ -893,3 +1059,291 @@ ipcMain.handle('app:stopGame', () => {
   stopGame();
   return { ok: true };
 });
+
+// ============ Update checker ============
+const REPO_OWNER = 'hell0zz12';
+const REPO_NAME = 'GlassCraft-Launcher';
+
+async function checkForUpdates(manualTrigger = true) {
+  try {
+    const settings = readJson(SETTINGS_FILE, {});
+    if (!manualTrigger && settings.autoUpdate === false) return null;
+
+    const res = await fetch(
+      `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`,
+      { headers: { 'User-Agent': 'GlassCraft-Launcher' } }
+    );
+    if (!res.ok) {
+      log('updateCheck failed', res.status);
+      if (manualTrigger) {
+        notifications.notify({
+          title: 'GlassCraft',
+          body: 'Не удалось проверить обновление',
+        });
+      }
+      return null;
+    }
+    const release = await res.json();
+    const latest = (release.tag_name || '').replace(/^v/, '');
+    const current = require('../package.json').version;
+
+    log('updateCheck', { current, latest });
+
+    if (compareVersions(latest, current) > 0) {
+      const url = release.html_url;
+      notifications.notify({
+        title: 'GlassCraft — доступна новая версия',
+        body: `${current} → ${latest}. Нажми чтобы открыть страницу.`,
+        urgency: 'normal',
+        onClick: () => shell.openExternal(url),
+      });
+      // Уведомим renderer
+      if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+        mainWindow.webContents.send('app:updateAvailable', { current, latest, url });
+      }
+      return { available: true, current, latest, url };
+    }
+
+    if (manualTrigger) {
+      notifications.notify({
+        title: 'GlassCraft',
+        body: 'Лаунчер обновлён до последней версии',
+      });
+    }
+    return { available: false, current, latest };
+  } catch (e) {
+    log('updateCheck error', e.message);
+    if (manualTrigger) {
+      notifications.notify({
+        title: 'GlassCraft',
+        body: 'Ошибка проверки обновлений',
+      });
+    }
+    return null;
+  }
+}
+
+function compareVersions(a, b) {
+  const pa = a.split('.').map((n) => parseInt(n, 10) || 0);
+  const pb = b.split('.').map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x - y;
+  }
+  return 0;
+}
+
+ipcMain.handle('app:checkUpdates', () => checkForUpdates(true));
+ipcMain.handle('app:openExternal', (_, url) => shell.openExternal(url));
+ipcMain.handle('app:getVersion', () => require('../package.json').version);
+
+// ============ Auto-clean logs ============
+function autoCleanLogs() {
+  try {
+    const settings = readJson(SETTINGS_FILE, {});
+    if (settings.autoCleanLogs === false) return;
+
+    // Чистим launcher.log если он больше 5 MB
+    if (fs.existsSync(LOG_FILE)) {
+      const stat = fs.statSync(LOG_FILE);
+      if (stat.size > 5 * 1024 * 1024) {
+        // Оставим последний 1 MB
+        const fd = fs.openSync(LOG_FILE, 'r');
+        const buf = Buffer.alloc(1024 * 1024);
+        fs.readSync(fd, buf, 0, buf.length, stat.size - buf.length);
+        fs.closeSync(fd);
+        fs.writeFileSync(LOG_FILE, buf);
+        log('Log truncated');
+      }
+    }
+
+    // Чистим логи Minecraft в gameDir/logs/, оставляя последние 20 файлов и не старше 30 дней
+    const gameLogs = path.join(settings.gameDir || MC_DIR, 'logs');
+    if (fs.existsSync(gameLogs)) {
+      const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const files = fs.readdirSync(gameLogs)
+        .map((name) => {
+          try {
+            const full = path.join(gameLogs, name);
+            return { name, full, mtime: fs.statSync(full).mtimeMs };
+          } catch { return null; }
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.mtime - a.mtime);
+
+      // Удаляем всё что старше cutoff и за пределами топ-20
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        if (i >= 20 || f.mtime < cutoff) {
+          try { fs.unlinkSync(f.full); } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    log('autoClean error', e.message);
+  }
+}
+
+ipcMain.handle('app:cleanLogs', () => {
+  autoCleanLogs();
+  return { ok: true };
+});
+
+// ============ Notifications IPC ============
+ipcMain.handle('notify', (_, args) => {
+  notifications.notify(args);
+});
+
+ipcMain.handle('notify:setEnabled', (_, enabled) => {
+  notifications.setEnabled(enabled);
+});
+
+// ============ Modpacks (.mrpack) ============
+
+// Поиск modpack-проектов на Modrinth
+ipcMain.handle('modrinth:searchModpacks', async (_, { query, gameVersion, loader, limit, offset }) => {
+  const facets = [['project_type:modpack']];
+  if (gameVersion) facets.push([`versions:${gameVersion}`]);
+  if (loader) facets.push([`categories:${loader}`]);
+
+  const params = new URLSearchParams({
+    query: query || '',
+    limit: String(limit || 24),
+    offset: String(offset || 0),
+    index: 'relevance',
+  });
+  params.append('facets', JSON.stringify(facets));
+
+  const url = `${MODRINTH_API}/search?${params}`;
+  const res = await fetch(url, { headers: { 'User-Agent': UA } });
+  if (!res.ok) throw new Error(`Modrinth: ${res.status}`);
+  return res.json();
+});
+
+// Импорт .mrpack из Modrinth-version или локального файла
+ipcMain.handle('modpack:install', async (event, { project, version, gameDir }) => {
+  const target = gameDir || MC_DIR;
+  const file = version.files.find((f) => f.primary) || version.files[0];
+  if (!file) throw new Error('Нет файла в версии модпака');
+
+  const send = (channel, payload) => {
+    if (event.sender.isDestroyed()) return;
+    try { event.sender.send(channel, payload); } catch {}
+  };
+
+  const tmpPath = path.join(APP_DIR, 'tmp', `${Date.now()}_${file.filename}`);
+  send('modpack:progress', { phase: 'download', progress: 0, slug: project.slug });
+
+  try {
+    await downloadFile(file.url, tmpPath, (p) => {
+      send('modpack:progress', { phase: 'download', progress: p, slug: project.slug });
+    });
+    const result = await applyMrpack(tmpPath, target, project.title, (phase, p) => {
+      send('modpack:progress', { phase, progress: p, slug: project.slug });
+    });
+    try { fs.unlinkSync(tmpPath); } catch {}
+    return { ok: true, ...result };
+  } catch (e) {
+    log('modpack install error', e.message);
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+ipcMain.handle('modpack:importLocal', async (_, { gameDir }) => {
+  const target = gameDir || MC_DIR;
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Выбери .mrpack',
+    properties: ['openFile'],
+    filters: [{ name: 'Modrinth modpack', extensions: ['mrpack', 'zip'] }],
+  });
+  if (result.canceled || !result.filePaths.length) return { ok: false, canceled: true };
+  const src = result.filePaths[0];
+  try {
+    const r = await applyMrpack(src, target, path.basename(src, path.extname(src)));
+    return { ok: true, ...r };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+});
+
+async function applyMrpack(packPath, gameDir, name, onProgress) {
+  // .mrpack — это zip с modrinth.index.json и опц. папкой overrides/
+  const zip = new AdmZip(packPath);
+  const indexEntry = zip.getEntry('modrinth.index.json');
+  if (!indexEntry) throw new Error('Не найден modrinth.index.json в архиве');
+
+  const index = JSON.parse(indexEntry.getData().toString('utf-8'));
+
+  const fileCount = (index.files || []).length;
+  let done = 0;
+
+  // 1. Скачиваем все files в их path
+  for (const f of index.files || []) {
+    const url = f.downloads?.[0];
+    if (!url) continue;
+    const dest = path.join(gameDir, f.path);
+    try {
+      await downloadFile(url, dest);
+    } catch (e) {
+      log('mrpack file fail', f.path, e.message);
+    }
+    done++;
+    if (onProgress) onProgress('files', done / fileCount);
+  }
+
+  // 2. Копируем содержимое overrides/ и client-overrides/ в gameDir
+  for (const folder of ['overrides', 'client-overrides']) {
+    for (const e of zip.getEntries()) {
+      if (e.entryName.startsWith(`${folder}/`) && !e.isDirectory) {
+        const rel = e.entryName.slice(folder.length + 1);
+        if (!rel) continue;
+        const out = path.join(gameDir, rel);
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        fs.writeFileSync(out, e.getData());
+      }
+    }
+  }
+
+  // 3. Сохраняем как кастомную версию через minecraft-блок dependencies
+  // index.dependencies = { minecraft: "1.20.1", "fabric-loader": "0.15.0" }
+  const mcVersion = index.dependencies?.minecraft;
+  let loaderType, loaderVersion;
+  if (index.dependencies?.['fabric-loader']) {
+    loaderType = 'fabric';
+    loaderVersion = index.dependencies['fabric-loader'];
+  } else if (index.dependencies?.['forge']) {
+    loaderType = 'forge';
+    loaderVersion = index.dependencies['forge'];
+  } else if (index.dependencies?.['quilt-loader']) {
+    loaderType = 'quilt';
+    loaderVersion = index.dependencies['quilt-loader'];
+  } else if (index.dependencies?.['neoforge']) {
+    loaderType = 'neoforge';
+    loaderVersion = index.dependencies['neoforge'];
+  }
+
+  // Регистрируем модпак в installed.json для UI
+  const meta = readJson(MODPACKS_FILE, {});
+  const id = `mrpack:${index.name || name}`;
+  meta[id] = {
+    name: index.name || name,
+    summary: index.summary || '',
+    versionId: index.versionId,
+    mcVersion,
+    loader: loaderType,
+    loaderVersion,
+    fileCount,
+    installedAt: Date.now(),
+  };
+  writeJson(MODPACKS_FILE, meta);
+
+  return {
+    name: index.name || name,
+    mcVersion,
+    loader: loaderType,
+    loaderVersion,
+    fileCount,
+  };
+}
+
+ipcMain.handle('modpacks:list', () => readJson(MODPACKS_FILE, {}));

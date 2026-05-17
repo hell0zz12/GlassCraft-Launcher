@@ -13,10 +13,13 @@ const state = {
   settings: { memory: { min: '1G', max: '4G' }, javaPath: '', gameDir: '' },
   java: {},
   installed: {},
+  modpacks: {},
   gameRunning: false,
+  appVersion: '0.0.0',
   theme: 'glass',
+  lang: 'ru',
   customTheme: { accent: '#0a84ff', bg: '#15151b', text: '#ffffff', bgAlpha: 100 },
-  searchCache: { mod: false, resourcepack: false, shader: false },
+  searchCache: { mod: false, resourcepack: false, shader: false, modpack: false },
   searchTimers: {},
   libraryTab: 'mod',
 };
@@ -137,6 +140,7 @@ function onPageEnter(page) {
   if (page === 'mods' && !state.searchCache.mod) performSearch('mod');
   if (page === 'resourcepacks' && !state.searchCache.resourcepack) performSearch('resourcepack');
   if (page === 'shaders' && !state.searchCache.shader) performSearch('shader');
+  if (page === 'modpacks' && !state.searchCache.modpack) performModpackSearch();
   if (page === 'library') refreshLibrary();
   if (page === 'settings') populateSettings();
 }
@@ -296,7 +300,15 @@ function loadThemeFromSettings() {
 async function init() {
   state.profile = await api.getProfile();
   state.settings = await api.getSettings();
+  state.appVersion = await api.getAppVersion();
   $('#userName').textContent = state.profile.username || 'Steve';
+
+  // Применяем язык
+  state.lang = state.settings.lang || 'ru';
+  if (window.i18n) {
+    window.i18n.setLang(state.lang);
+    window.i18n.applyI18n();
+  }
 
   bindThemePicker();
   loadThemeFromSettings();
@@ -387,6 +399,13 @@ async function init() {
     api.onTrayLaunch(() => {
       showPage('play');
       $('#playBtn').click();
+    });
+  }
+
+  // Update banner
+  if (api.onUpdateAvailable) {
+    api.onUpdateAvailable((info) => {
+      showUpdateBanner(info);
     });
   }
 }
@@ -683,16 +702,27 @@ $$('[data-search]').forEach((input) => {
   const type = input.dataset.search;
   input.addEventListener('input', () => {
     clearTimeout(state.searchTimers[type]);
-    state.searchTimers[type] = setTimeout(() => performSearch(type), 350);
+    state.searchTimers[type] = setTimeout(() => {
+      if (type === 'modpack') performModpackSearch();
+      else performSearch(type);
+    }, 350);
   });
 });
 
 $$('[data-version-filter]').forEach((sel) => {
-  sel.addEventListener('change', () => performSearch(sel.dataset.versionFilter));
+  sel.addEventListener('change', () => {
+    const type = sel.dataset.versionFilter;
+    if (type === 'modpack') performModpackSearch();
+    else performSearch(type);
+  });
 });
 
 $$('[data-loader-filter]').forEach((sel) => {
-  sel.addEventListener('change', () => performSearch(sel.dataset.loaderFilter));
+  sel.addEventListener('change', () => {
+    const type = sel.dataset.loaderFilter;
+    if (type === 'modpack') performModpackSearch();
+    else performSearch(type);
+  });
 });
 
 async function performSearch(type) {
@@ -1118,6 +1148,116 @@ function formatDownloads(n) {
   return String(n);
 }
 
+/* ===================== Modpacks ===================== */
+async function performModpackSearch() {
+  const grid = document.querySelector('[data-grid="modpack"]');
+  if (!grid) return;
+  const query = document.querySelector('[data-search="modpack"]')?.value || '';
+  const gameVersion = document.querySelector('[data-version-filter="modpack"]')?.value || '';
+  const loader = document.querySelector('[data-loader-filter="modpack"]')?.value || '';
+
+  grid.innerHTML = '<div class="empty">Поиск…</div>';
+  state.searchCache.modpack = true;
+
+  try {
+    const data = await api.searchModpacks({ query, gameVersion, loader, limit: 24 });
+    const items = data.hits || [];
+    if (!items.length) {
+      grid.innerHTML = '<div class="empty">Ничего не найдено</div>';
+      return;
+    }
+    grid.innerHTML = items.map((p) => modpackCardHTML(p)).join('');
+    grid.querySelectorAll('.install-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const slug = btn.dataset.slug;
+        const project = items.find((i) => i.slug === slug);
+        if (project) await installModpack(project);
+      });
+    });
+  } catch (err) {
+    console.error(err);
+    grid.innerHTML = '<div class="empty">Не удалось загрузить</div>';
+  }
+}
+
+function modpackCardHTML(p) {
+  const cover = p.icon_url ? `style="background-image:url('${escapeHtml(p.icon_url)}');"` : '';
+  const downloads = p.downloads ? formatDownloads(p.downloads) + ' загрузок' : '';
+  return `
+    <article class="item-card" data-slug="${escapeHtml(p.slug)}">
+      <div class="item-cover" ${cover}></div>
+      <div class="item-body">
+        <div class="item-title">${escapeHtml(p.title)}</div>
+        <div class="item-desc">${escapeHtml(p.description || '')}</div>
+        <div class="item-meta">${escapeHtml(downloads)}</div>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-primary install-btn" data-slug="${escapeHtml(p.slug)}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Установить
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+async function installModpack(project) {
+  try {
+    const versions = await api.getProjectVersions({ slug: project.slug, gameVersion: '', loader: '' });
+    if (!versions || !versions.length) {
+      toast('Нет доступных версий модпака');
+      return;
+    }
+    const v = versions[0]; // берём свежую
+    toast(`Установка ${project.title}…`);
+    const card = document.querySelector(`[data-slug="${CSS.escape(project.slug)}"]`);
+    let bar = card?.querySelector('.item-progress-fill');
+    if (card && !bar) {
+      const wrap = document.createElement('div');
+      wrap.className = 'item-progress';
+      wrap.innerHTML = '<div class="item-progress-fill"></div>';
+      card.appendChild(wrap);
+      bar = wrap.querySelector('.item-progress-fill');
+    }
+    const res = await api.installModpack({ project, version: v, gameDir: state.settings.gameDir });
+    if (res?.ok) {
+      toast(`Модпак "${res.name}" установлен · ${res.fileCount} модов`);
+      const btn = card?.querySelector('.install-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-ghost');
+        btn.textContent = 'Установлен';
+      }
+      setTimeout(() => bar?.parentElement?.remove(), 800);
+    } else {
+      toast(`Ошибка: ${res?.error || 'неизвестно'}`);
+    }
+  } catch (e) {
+    console.error(e);
+    toast(`Ошибка установки модпака`);
+  }
+}
+
+if (api.onModpackProgress) {
+  api.onModpackProgress(({ slug, phase, progress }) => {
+    const card = document.querySelector(`[data-slug="${CSS.escape(slug)}"]`);
+    if (!card) return;
+    const bar = card.querySelector('.item-progress-fill');
+    if (bar) bar.style.width = `${Math.round(progress * 100)}%`;
+  });
+}
+
+$('#importMrpackBtn')?.addEventListener('click', async () => {
+  const r = await api.importModpackLocal({ gameDir: state.settings.gameDir });
+  if (r?.canceled) return;
+  if (r?.ok) {
+    toast(`Модпак "${r.name}" импортирован · ${r.fileCount} модов`);
+  } else {
+    toast(`Ошибка: ${r?.error || 'не удалось'}`);
+  }
+});
+
 /* ===================== Library ===================== */
 $$('.tab[data-lib]').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -1181,6 +1321,15 @@ function populateSettings() {
   $('#settingsMemMin').value = state.settings.memory?.min || '1G';
   $('#settingsMemMax').value = state.settings.memory?.max || '4G';
   $('#settingsGameDir').value = state.settings.gameDir || '';
+  $('#settingsLang').value = state.settings.lang || 'ru';
+  $('#settingsWindowMode').value = state.settings.windowMode || 'windowed';
+  $('#settingsWindowSize').value = `${state.settings.windowWidth || 854}x${state.settings.windowHeight || 480}`;
+  $('#settingsJvmArgs').value = state.settings.jvmArgs || '';
+  $('#settingsDebugConsole').checked = !!state.settings.debugConsole;
+  $('#settingsAutoCleanLogs').checked = state.settings.autoCleanLogs !== false;
+  $('#settingsNotifications').checked = state.settings.notifications !== false;
+  $('#settingsAutoUpdate').checked = state.settings.autoUpdate !== false;
+  $('#aboutVersion').textContent = `Версия ${state.appVersion}`;
   refreshJavaList();
   loadCustomVersions().then(renderCustomVersionsList);
 }
@@ -1193,23 +1342,81 @@ $('#browseJava').addEventListener('click', async () => {
 $('#saveSettings').addEventListener('click', async () => {
   const username = ($('#settingsUsername').value || 'Steve').trim().slice(0, 16) || 'Steve';
   state.profile = { ...state.profile, username };
+
+  // Парсим размер окна
+  const sizeMatch = ($('#settingsWindowSize').value || '854x480').match(/(\d+)\s*x\s*(\d+)/);
+  const winW = sizeMatch ? parseInt(sizeMatch[1], 10) : 854;
+  const winH = sizeMatch ? parseInt(sizeMatch[2], 10) : 480;
+
   state.settings = {
+    ...state.settings,
     memory: {
       min: $('#settingsMemMin').value || '1G',
       max: $('#settingsMemMax').value || '4G',
     },
     javaPath: $('#settingsJava').value || '',
     gameDir: $('#settingsGameDir').value || state.settings.gameDir,
+    lang: $('#settingsLang').value || 'ru',
+    windowMode: $('#settingsWindowMode').value || 'windowed',
+    windowWidth: winW,
+    windowHeight: winH,
+    jvmArgs: $('#settingsJvmArgs').value || '',
+    debugConsole: $('#settingsDebugConsole').checked,
+    autoCleanLogs: $('#settingsAutoCleanLogs').checked,
+    notifications: $('#settingsNotifications').checked,
+    autoUpdate: $('#settingsAutoUpdate').checked,
   };
   await api.saveProfile(state.profile);
   await api.saveSettings(state.settings);
   $('#userName').textContent = state.profile.username;
+
+  // Применить язык
+  if (state.lang !== state.settings.lang) {
+    state.lang = state.settings.lang;
+    window.i18n.setLang(state.lang);
+    window.i18n.applyI18n();
+  }
+
+  // Применить настройку уведомлений
+  if (api.setNotifications) api.setNotifications(state.settings.notifications);
+
   const hint = $('#settingsHint');
-  hint.textContent = '✓ Сохранено';
+  hint.textContent = window.i18n ? window.i18n.t('settings.saved') : '✓ Сохранено';
   hint.classList.add('show');
   setTimeout(() => hint.classList.remove('show'), 1800);
   updateJavaStatus();
 });
+
+/* About / Update buttons */
+$('#aboutRepo')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  api.openExternal('https://github.com/hell0zz12/GlassCraft-Launcher');
+});
+$('#aboutReport')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  api.openExternal('https://github.com/hell0zz12/GlassCraft-Launcher/issues');
+});
+$('#checkUpdateBtn')?.addEventListener('click', async () => {
+  toast('Проверяю обновление…');
+  const r = await api.checkUpdates();
+  if (!r) return;
+  if (r.available) {
+    toast(`Доступна версия ${r.latest}`);
+    showUpdateBanner(r);
+  } else {
+    toast('Лаунчер обновлён до последней версии');
+  }
+});
+
+function showUpdateBanner(info) {
+  const banner = $('#updateBanner');
+  const sub = $('#updateSub');
+  if (!banner || !sub) return;
+  sub.textContent = `${info.current} → ${info.latest}`;
+  banner.hidden = false;
+  $('#updateOpenBtn').onclick = () => api.openExternal(info.url);
+  $('#updateDismiss').onclick = () => { banner.hidden = true; };
+}
 
 /* ===================== Custom versions ===================== */
 function openBaseVersionPicker(folderName) {

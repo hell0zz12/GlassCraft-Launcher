@@ -112,6 +112,14 @@ try { execSync(`git tag -d ${tag}`, { cwd: ROOT, stdio: 'ignore' }); } catch {}
 run(`git tag -a ${tag} -m "Release ${tag}"`);
 
 log('git', 'Пушу в origin…');
+
+// Сначала подтягиваем удалённые коммиты, чтобы push не отвергался при desync
+try {
+  execSync('git pull --rebase origin HEAD', { cwd: ROOT, stdio: 'inherit' });
+} catch (e) {
+  fail(`git pull --rebase упал. Реши конфликты вручную и запусти снова.\n${e.message}`);
+}
+
 run(`git push origin HEAD`);
 run(`git push origin ${tag}`);
 

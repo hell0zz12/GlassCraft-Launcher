@@ -287,6 +287,13 @@ select.input option { background: #1c1c24; color: #fff; }
 }
 .btn-ghost:hover:not(:disabled) { background: var(--fill-hover); }
 
+.btn-danger-ghost {
+  background: var(--fill);
+  border: 1px solid var(--stroke);
+  color: #ff6b6b;
+}
+.btn-danger-ghost:hover:not(:disabled) { background: rgba(255,107,107,0.12); color: #ff8b9c; }
+
 .btn-large {
   padding: 11px 24px;
   font-size: 14px;
@@ -317,6 +324,20 @@ select.input option { background: #1c1c24; color: #fff; }
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-mute);
+}
+
+/* ========== Play time ========== */
+.playtime-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 11px;
+  color: var(--text-mute);
+}
+.playtime-bar svg {
+  width: 13px; height: 13px;
+  flex-shrink: 0;
 }
 
 /* ========== Filters ========== */
@@ -404,6 +425,11 @@ select.input option { background: #1c1c24; color: #fff; }
   gap: 10px;
   flex-wrap: wrap;
 }
+.lib-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .tabs {
   display: flex; align-items: center; gap: 2px;
   padding: 3px;
@@ -481,6 +507,110 @@ select.input option { background: #1c1c24; color: #fff; }
   stroke-linejoin: round;
 }
 
+/* ========== Accounts ========== */
+.account-create-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.account-create-row .input { flex: 1; min-width: 0; }
+.acct-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+.acct-row:last-child { border-bottom: none; }
+.acct-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--fill-hover);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  font-size: 14px; font-weight: 600;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+.acct-name {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.acct-name .acct-active-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  margin-left: 8px;
+}
+.acct-actions {
+  display: flex; gap: 4px; flex-shrink: 0;
+}
+.acct-btn {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  color: var(--text-mute);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s ease, color .15s ease;
+}
+.acct-btn:hover { background: var(--fill-hover); color: var(--text); }
+.acct-btn.fav-active { color: #f5a623; }
+.acct-btn.fav-active:hover { background: rgba(245,166,35,0.15); }
+.acct-btn.delete:hover { background: rgba(255,55,95,0.18); color: #ff8b9c; }
+.acct-btn svg {
+  width: 14px; height: 14px;
+  fill: none; stroke: currentColor;
+  stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round;
+}
+.acct-btn.star-svg { fill: currentColor; stroke: none; }
+
+/* ========== Servers ========== */
+.srv-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--stroke-soft);
+}
+.srv-row:last-child { border-bottom: none; }
+.srv-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--fill-hover);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.srv-icon svg { width: 14px; height: 14px; }
+.srv-info { flex: 1; min-width: 0; }
+.srv-name {
+  font-size: 13px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.srv-addr {
+  font-size: 11px; color: var(--text-mute);
+  font-family: monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.srv-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+/* ========== Resource pack preview ========== */
+.modal-preview {
+  width: min(640px, 92vw);
+}
+.preview-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+.preview-img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
 /* ========== Settings ========== */
 .settings-block {
   background: var(--fill);
@@ -491,6 +621,9 @@ select.input option { background: #1c1c24; color: #fff; }
   flex-direction: column;
   gap: 14px;
   max-width: 580px;
+}
+.settings-block + .library-list {
+  margin-top: 20px;
 }
 .block-title {
   font-size: 13px;
@@ -1285,6 +1418,14 @@ select.input option {
   justify-content: flex-end;
   gap: 8px;
 }
+
+.modal-body {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin-bottom: 16px;
+}
+.modal-body strong { color: var(--text); font-weight: 600; }
 
 /* ============================================================ */
 /* CV row warning state                                          */

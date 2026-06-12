@@ -4,7 +4,7 @@ cd /d "%~dp0"
 
 echo.
 echo ============================================
-echo   GlassCraft Launcher - Build
+echo   GlassCraft Launcher
 echo ============================================
 echo.
 
@@ -18,21 +18,24 @@ if not exist "node_modules" (
     )
 )
 
-echo [1/3] Закрываю запущенные копии лаунчера...
+set /p RELEASE_CHOICE="Выложить релиз на GitHub? (y/N): "
+
+if /i "%RELEASE_CHOICE%"=="y" goto release
+
+REM ===== Локальный билд =====
+echo.
+echo Локальная сборка...
+echo.
+
 taskkill /F /IM GlassCraft.exe >nul 2>&1
 timeout /t 1 /nobreak >nul
 
-echo [2/3] Генерация иконок...
 call npm run icons
 if errorlevel 1 (
     echo ОШИБКА генерации иконок
     pause
     exit /b 1
 )
-
-echo.
-echo [3/3] Сборка приложения...
-echo.
 
 call npm run build
 if errorlevel 1 (
@@ -43,23 +46,17 @@ if errorlevel 1 (
 
 echo.
 echo ============================================
-echo   Сборка готова!
+echo   Готово!
 echo ============================================
-echo.
 echo Папка:  build\GlassCraft-latest\
 echo Запуск: build\GlassCraft-latest\GlassCraft.exe
 echo.
-echo ============================================
-echo.
+pause
+exit /b 0
 
-set /p RELEASE_CHOICE="Выложить новый релиз на GitHub? (y/N): "
-if /i not "%RELEASE_CHOICE%"=="y" (
-    echo.
-    echo Готово. Релиз пропущен.
-    pause
-    exit /b 0
-)
 
+REM ===== Релиз =====
+:release
 echo.
 echo ============================================
 echo   Публикация релиза
@@ -70,15 +67,13 @@ where gh >nul 2>&1
 if errorlevel 1 (
     echo.
     echo ✗ GitHub CLI ^(gh^) не установлен.
-    echo.
     echo   Установка:    winget install GitHub.cli
     echo   Авторизация:  gh auth login
-    echo.
-    echo Сначала установи и залогинься, потом запусти build.bat снова.
     pause
     exit /b 1
 )
 
+REM release-скрипт сам сделает: bump → icons → build → zip → push → release
 call npm run release
 if errorlevel 1 (
     echo.

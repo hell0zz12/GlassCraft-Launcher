@@ -53,6 +53,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
             <span>Библиотека</span>
           </button>
+          <button class="nav-item" data-page="profiles">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <span data-i18n="nav.profiles">Профили</span>
+          </button>
           <button class="nav-item" data-page="settings">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             <span>Настройки</span>
@@ -134,6 +138,11 @@
             <div class="progress" id="launchProgress" hidden>
               <div class="progress-bar"><div class="progress-fill" id="launchFill"></div></div>
               <div class="progress-text" id="launchText">Загрузка…</div>
+            </div>
+
+            <div class="playtime-bar" id="playtimeBar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span id="playtimeText">Время игры: —</span>
             </div>
           </div>
         </div>
@@ -222,12 +231,64 @@
               <button class="tab" data-lib="resourcepack">Ресурс-паки</button>
               <button class="tab" data-lib="shader">Шейдеры</button>
             </div>
-            <button class="btn btn-ghost btn-small" id="openFolderBtn">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-              Открыть папку
-            </button>
+            <div class="lib-toolbar-actions">
+              <button class="btn btn-ghost btn-small" id="openFolderBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Открыть папку
+              </button>
+              <button class="btn btn-ghost btn-small btn-danger-ghost" id="deleteAllBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                Удалить всё
+              </button>
+            </div>
           </div>
           <div class="library-list" id="libraryList"></div>
+        </div>
+
+        <!-- PROFILES -->
+        <div class="page" data-page="profiles" hidden>
+          <h2 class="page-title">Профили</h2>
+          <p class="page-sub">Аккаунты и серверы</p>
+
+          <div class="lib-toolbar">
+            <div class="tabs">
+              <button class="tab active" data-profile-tab="accounts">Аккаунты</button>
+              <button class="tab" data-profile-tab="servers">Серверы</button>
+            </div>
+          </div>
+
+          <div id="profileTabAccounts">
+            <div class="settings-block">
+              <div class="block-title">Новый аккаунт</div>
+              <div class="account-create-row">
+                <input type="text" id="newAccountName" class="input" maxlength="16" placeholder="Никнейм">
+                <button class="btn btn-primary btn-small" id="createAccountBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Создать
+                </button>
+                <button class="btn btn-ghost btn-small" id="randomAccountBtn" title="Случайный никнейм">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  Случайный
+                </button>
+              </div>
+            </div>
+            <div class="library-list" id="accountsList"></div>
+          </div>
+
+          <div id="profileTabServers" hidden>
+            <div class="settings-block">
+              <div class="block-title">Добавить сервер</div>
+              <div class="account-create-row">
+                <input type="text" id="newServerName" class="input" maxlength="32" placeholder="Название">
+                <input type="text" id="newServerAddress" class="input" maxlength="128" placeholder="IP: порт">
+                <button class="btn btn-primary btn-small" id="addServerBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Добавить
+                </button>
+              </div>
+            </div>
+            <div class="library-list" id="serversList"></div>
+          </div>
         </div>
 
         <!-- SETTINGS -->

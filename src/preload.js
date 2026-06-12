@@ -43,8 +43,10 @@ contextBridge.exposeInMainWorld('api', {
   // Content
   listContent: (args) => ipcRenderer.invoke('content:list', args),
   deleteContent: (args) => ipcRenderer.invoke('content:delete', args),
+  deleteAllContent: (args) => ipcRenderer.invoke('content:deleteAll', args),
   openContentFolder: (args) => ipcRenderer.invoke('content:openFolder', args),
   listInstalled: (args) => ipcRenderer.invoke('installed:list', args),
+  saveInstalled: (data) => ipcRenderer.invoke('installed:save', data),
 
   // Events
   onInstallProgress: (cb) => ipcRenderer.on('install:progress', (_, d) => cb(d)),
@@ -77,4 +79,20 @@ contextBridge.exposeInMainWorld('api', {
   importModpackLocal: (args) => ipcRenderer.invoke('modpack:importLocal', args),
   listModpacks: () => ipcRenderer.invoke('modpacks:list'),
   onModpackProgress: (cb) => ipcRenderer.on('modpack:progress', (_, d) => cb(d)),
+
+  // Accounts
+  listAccounts: () => ipcRenderer.invoke('accounts:list'),
+  saveAccounts: (accounts) => ipcRenderer.invoke('accounts:save', accounts),
+  createAccount: (args) => ipcRenderer.invoke('accounts:create', args),
+  deleteAccount: (args) => ipcRenderer.invoke('accounts:delete', args),
+  toggleFavoriteAccount: (args) => ipcRenderer.invoke('accounts:toggleFavorite', args),
+  setActiveAccount: (args) => ipcRenderer.invoke('accounts:setActive', args),
+
+  // Play Time
+  getPlaytime: () => ipcRenderer.invoke('playtime:get'),
+  addPlaytime: (args) => ipcRenderer.invoke('playtime:add', args),
+
+  // Servers
+  listServers: () => ipcRenderer.invoke('servers:list'),
+  saveServers: (servers) => ipcRenderer.invoke('servers:save', servers),
 });

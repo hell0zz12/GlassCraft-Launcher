@@ -22,6 +22,10 @@ const state = {
   searchCache: { mod: false, resourcepack: false, shader: false, modpack: false },
   searchTimers: {},
   libraryTab: 'mod',
+  accounts: [],
+  servers: [],
+  playtime: {},
+  gameStartTime: null,
 };
 
 /* ===================== Helpers ===================== */
@@ -142,6 +146,7 @@ function onPageEnter(page) {
   if (page === 'shaders' && !state.searchCache.shader) performSearch('shader');
   if (page === 'modpacks' && !state.searchCache.modpack) performModpackSearch();
   if (page === 'library') refreshLibrary();
+  if (page === 'profiles') { renderAccounts(); renderServers(); }
   if (page === 'settings') populateSettings();
 }
 
@@ -392,6 +397,16 @@ async function init() {
     state.gameRunning = false;
     updatePlayButton();
     toast('Игра закрыта');
+
+    if (state.gameStartTime && state.selectedVersion) {
+      const elapsed = Math.floor((Date.now() - state.gameStartTime) / 1000);
+      state.gameStartTime = null;
+      if (elapsed > 5) {
+        api.addPlaytime({ version: state.selectedVersion, seconds: elapsed });
+        state.playtime[state.selectedVersion] = (state.playtime[state.selectedVersion] || 0) + elapsed;
+        renderPlaytime();
+      }
+    }
   });
 
   // Tray "Запустить игру" — кликаем кнопку Play
@@ -692,6 +707,7 @@ $('#playBtn').addEventListener('click', async () => {
     $('#launchText').textContent = 'Запущено';
     $('#launchFill').style.width = '100%';
     state.gameRunning = true;
+    state.gameStartTime = Date.now();
     updatePlayButton();
     setTimeout(() => { $('#launchProgress').hidden = true; }, 2000);
   }
@@ -759,6 +775,18 @@ function renderGrid(type, items) {
       if (project) installProject(project, type);
     });
   });
+
+  if (type === 'resourcepack') {
+    grid.querySelectorAll('.item-card').forEach((card) => {
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.install-btn')) return;
+        const slug = card.dataset.slug;
+        const project = items.find((i) => i.slug === slug);
+        if (project) openResourcePackPreview(project);
+      });
+      card.style.cursor = 'pointer';
+    });
+  }
 }
 
 function itemCardHTML(p) {
@@ -1203,40 +1231,137 @@ function modpackCardHTML(p) {
 
 async function installModpack(project) {
   try {
-    const versions = await api.getProjectVersions({ slug: project.slug, gameVersion: '', loader: '' });
+    const gameVersion = document.querySelector('[data-version-filter="modpack"]')?.value || '';
+    const loader = document.querySelector('[data-loader-filter="modpack"]')?.value || '';
+
+    const versions = await api.getProjectVersions({
+      slug: project.slug,
+      gameVersion,
+      loader,
+    });
     if (!versions || !versions.length) {
-      toast('Нет доступных версий модпака');
+      toast('Нет совместимой версии. Сними фильтры');
       return;
     }
-    const v = versions[0]; // берём свежую
-    toast(`Установка ${project.title}…`);
-    const card = document.querySelector(`[data-slug="${CSS.escape(project.slug)}"]`);
-    let bar = card?.querySelector('.item-progress-fill');
-    if (card && !bar) {
-      const wrap = document.createElement('div');
-      wrap.className = 'item-progress';
-      wrap.innerHTML = '<div class="item-progress-fill"></div>';
-      card.appendChild(wrap);
-      bar = wrap.querySelector('.item-progress-fill');
-    }
-    const res = await api.installModpack({ project, version: v, gameDir: state.settings.gameDir });
-    if (res?.ok) {
-      toast(`Модпак "${res.name}" установлен · ${res.fileCount} модов`);
-      const btn = card?.querySelector('.install-btn');
-      if (btn) {
-        btn.disabled = true;
-        btn.classList.remove('btn-primary');
-        btn.classList.add('btn-ghost');
-        btn.textContent = 'Установлен';
-      }
-      setTimeout(() => bar?.parentElement?.remove(), 800);
+    if (versions.length === 1) {
+      await doInstallModpack(project, versions[0]);
     } else {
-      toast(`Ошибка: ${res?.error || 'неизвестно'}`);
+      openModpackVersionPicker(project, versions);
     }
   } catch (e) {
     console.error(e);
-    toast(`Ошибка установки модпака`);
+    toast('Ошибка установки модпака');
   }
+}
+
+async function doInstallModpack(project, v) {
+  toast(`Установка ${project.title}…`);
+  const card = document.querySelector(`[data-slug="${CSS.escape(project.slug)}"]`);
+  let bar = card?.querySelector('.item-progress-fill');
+  if (card && !bar) {
+    const wrap = document.createElement('div');
+    wrap.className = 'item-progress';
+    wrap.innerHTML = '<div class="item-progress-fill"></div>';
+    card.appendChild(wrap);
+    bar = wrap.querySelector('.item-progress-fill');
+  }
+  const res = await api.installModpack({ project, version: v, gameDir: state.settings.gameDir });
+  if (res?.ok) {
+    toast(`Модпак "${res.name}" установлен · ${res.fileCount} модов`);
+    await refreshInstalled();
+    applyInstalledStateToCard(project.slug);
+    setTimeout(() => bar?.parentElement?.remove(), 800);
+  } else {
+    toast(`Ошибка: ${res?.error || 'неизвестно'}`);
+  }
+}
+
+function openModpackVersionPicker(project, versions) {
+  // Сортировка: release > beta > alpha; затем по дате
+  const typeOrder = { release: 0, beta: 1, alpha: 2 };
+  const sorted = [...versions].sort((a, b) => {
+    const ta = typeOrder[a.version_type] ?? 3;
+    const tb = typeOrder[b.version_type] ?? 3;
+    if (ta !== tb) return ta - tb;
+    return new Date(b.date_published || 0) - new Date(a.date_published || 0);
+  });
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const installedMeta = state.modpacks[project.slug];
+  const installedVersionId = installedMeta?.versionId || null;
+
+  overlay.innerHTML = `
+    <div class="modal modal-versions">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">${escapeHtml(project.title)}</div>
+          <div class="modal-sub-line">Выбери версию модпака</div>
+        </div>
+        <button class="modal-close" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="version-filter-row">
+        <input type="text" class="input v-search" placeholder="Поиск по версии или MC…">
+        <select class="input v-loader-filter">
+          <option value="">Все загрузчики</option>
+          <option value="fabric">Fabric</option>
+          <option value="forge">Forge</option>
+          <option value="quilt">Quilt</option>
+          <option value="neoforge">NeoForge</option>
+        </select>
+      </div>
+      <div class="version-list">
+        ${sorted.map((v) => versionRowHTML(v, installedVersionId)).join('')}
+      </div>
+      <div class="modal-actions">
+        <span class="version-hint">${sorted.length} версий</span>
+        <button class="btn btn-ghost btn-small modal-cancel">Закрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  const close = () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 220);
+  };
+  overlay.querySelector('.modal-close').addEventListener('click', close);
+  overlay.querySelector('.modal-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const search = overlay.querySelector('.v-search');
+  const loaderFilter = overlay.querySelector('.v-loader-filter');
+  const hint = overlay.querySelector('.version-hint');
+  function applyFilter() {
+    const q = search.value.toLowerCase().trim();
+    const ldr = loaderFilter.value;
+    let visible = 0;
+    overlay.querySelectorAll('.v-row').forEach((row) => {
+      const text = row.dataset.search;
+      const loaders = (row.dataset.loaders || '').split(',');
+      const matchQ = !q || text.includes(q);
+      const matchL = !ldr || loaders.includes(ldr);
+      const show = matchQ && matchL;
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    hint.textContent = `${visible} версий`;
+  }
+  search.addEventListener('input', applyFilter);
+  loaderFilter.addEventListener('change', applyFilter);
+
+  overlay.querySelectorAll('.v-row').forEach((row) => {
+    row.querySelector('.v-install').addEventListener('click', async () => {
+      const id = row.dataset.versionId;
+      const v = sorted.find((x) => x.id === id);
+      if (!v) return;
+      close();
+      await doInstallModpack(project, v);
+    });
+  });
 }
 
 if (api.onModpackProgress) {
@@ -1258,6 +1383,16 @@ $('#importMrpackBtn')?.addEventListener('click', async () => {
   }
 });
 
+/* ===================== Profiles sub-tabs ===================== */
+$$('[data-profile-tab]').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.profileTab;
+    $$('[data-profile-tab]').forEach((t) => t.classList.toggle('active', t === tab));
+    $('#profileTabAccounts').hidden = target !== 'accounts';
+    $('#profileTabServers').hidden = target !== 'servers';
+  });
+});
+
 /* ===================== Library ===================== */
 $$('.tab[data-lib]').forEach((tab) => {
   tab.addEventListener('click', () => {
@@ -1269,6 +1404,60 @@ $$('.tab[data-lib]').forEach((tab) => {
 
 $('#openFolderBtn').addEventListener('click', () => {
   api.openContentFolder({ gameDir: state.settings.gameDir, type: state.libraryTab });
+});
+
+$('#deleteAllBtn')?.addEventListener('click', async () => {
+  const items = await api.listContent({ gameDir: state.settings.gameDir, type: state.libraryTab });
+  if (!items.length) { toast('Нечего удалять'); return; }
+
+  const typeNames = { mod: 'модов', resourcepack: 'ресурс-паков', shader: 'шейдеров' };
+  const typeName = typeNames[state.libraryTab] || 'файлов';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-confirm">
+      <div class="modal-head">
+        <div class="modal-title">Удалить всё?</div>
+        <button class="modal-close" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p>Будет удалено <strong>${items.length} ${typeName}</strong>. Это действие нельзя отменить.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-small modal-cancel">Отмена</button>
+        <button class="btn btn-danger btn-small modal-confirm-delete">Удалить всё</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  const close = () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 220);
+  };
+  overlay.querySelector('.modal-close').addEventListener('click', close);
+  overlay.querySelector('.modal-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  overlay.querySelector('.modal-confirm-delete').addEventListener('click', async () => {
+    close();
+    const res = await api.deleteAllContent({ gameDir: state.settings.gameDir, type: state.libraryTab });
+    if (res?.ok) {
+      await refreshInstalled();
+      document.querySelectorAll('.item-card[data-slug]').forEach((c) => {
+        const slug = c.dataset.slug;
+        if (slug) applyInstalledStateToCard(slug);
+      });
+      toast(`Удалено ${res.deleted || 0} ${typeName}`);
+      refreshLibrary();
+    } else {
+      toast('Ошибка удаления');
+    }
+  });
 });
 
 async function refreshLibrary() {
@@ -1299,7 +1488,10 @@ async function refreshLibrary() {
         const name = row?.dataset.name;
         if (!name) return;
         await api.deleteContent({ gameDir: state.settings.gameDir, type: state.libraryTab, name });
-        await refreshInstalled();
+  await refreshInstalled();
+  await loadAccounts();
+  await loadServers();
+  await loadPlaytime();
         // Обновим карточки во всех гридах поиска (если они открыты)
         document.querySelectorAll('.item-card[data-slug]').forEach((c) => {
           const slug = c.dataset.slug;
@@ -1564,6 +1756,289 @@ function renderCustomVersionsList() {
       openBaseVersionPicker(name);
     });
   });
+}
+
+/* ===================== Accounts ===================== */
+const ADJECTIVES = [
+  'Тёмный','Светлый','Дикий','Тихий','Быстрый','Красный','Синий','Зелёный',
+  'Стальной','Ледяной','Огненный','Ночной','Звёздный','Древний','Могучий',
+  'Таинственный','Серебряный','Золотой','Каменный','Воинственный','Храбрый',
+  'Вечный','Кристальный','Теневой','Драконий','Штормовой','Космический',
+];
+const NOUNS = [
+  'Волк','Орёл','Тигр','Медведь','Лев','Дракон','Рыцарь','Маг','Страж',
+  'Сокол','Гром','Клинок','Щит','Лучник','Призрак','Демон','Феникс',
+  'Разведчик','Следопыт','Паладин','Шаман','Рейнджер','Варвар','Ассасин',
+  'Скиталец','Викинг','Самурай','Ниндзя','Пират','Капитан','Вождь',
+];
+
+function generateRandomNick() {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  const num = Math.floor(Math.random() * 900) + 100;
+  return `${adj}${noun}${num}`;
+}
+
+async function loadAccounts() {
+  try {
+    state.accounts = await api.listAccounts() || [];
+  } catch {
+    state.accounts = [];
+  }
+}
+
+function renderAccounts() {
+  const list = $('#accountsList');
+  if (!list) return;
+
+  const activeUsername = state.profile.username || '';
+  const sorted = [...state.accounts].sort((a, b) => {
+    if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+
+  if (!sorted.length) {
+    list.innerHTML = '<div class="empty">Нет аккаунтов. Создай свой первый никнейм выше</div>';
+    return;
+  }
+
+  list.innerHTML = sorted.map((a) => {
+    const letter = (a.username || '?')[0].toUpperCase();
+    const isActive = a.username === activeUsername;
+    return `
+      <div class="acct-row" data-id="${escapeHtml(a.id)}">
+        <div class="acct-avatar">${escapeHtml(letter)}</div>
+        <div class="acct-name">
+          ${escapeHtml(a.username)}
+          ${isActive ? '<span class="acct-active-badge">Активный</span>' : ''}
+        </div>
+        <div class="acct-actions">
+          <button class="acct-btn set-active-btn" title="Играть от этого ника">
+            <svg viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4" fill="currentColor" stroke="none"/></svg>
+          </button>
+          <button class="acct-btn fav-btn ${a.favorite ? 'fav-active' : ''}" title="Избранное">
+            <svg class="star-svg" viewBox="0 0 24 24" ${a.favorite ? '' : 'fill="none" stroke="currentColor" stroke-width="1.6"'}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          </button>
+          <button class="acct-btn delete delete-btn" title="Удалить">
+            <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  list.querySelectorAll('.set-active-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.acct-row')?.dataset.id;
+      const acc = state.accounts.find((a) => a.id === id);
+      if (!acc) return;
+      state.profile.username = acc.username;
+      await api.setActiveAccount({ id });
+      await api.saveProfile(state.profile);
+      $('#userName').textContent = acc.username;
+      toast(`Активный аккаунт: ${acc.username}`);
+      renderAccounts();
+    });
+  });
+
+  list.querySelectorAll('.fav-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.acct-row')?.dataset.id;
+      state.accounts = await api.toggleFavoriteAccount({ id });
+      renderAccounts();
+    });
+  });
+
+  list.querySelectorAll('.delete-btn').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.acct-row')?.dataset.id;
+      const acc = state.accounts.find((a) => a.id === id);
+      if (!acc) return;
+      state.accounts = await api.deleteAccount({ id });
+      if (acc.username === state.profile.username) {
+        const first = state.accounts[0];
+        if (first) {
+          state.profile.username = first.username;
+          await api.setActiveAccount({ id: first.id });
+          await api.saveProfile(state.profile);
+          $('#userName').textContent = first.username;
+        }
+      }
+      toast('Аккаунт удалён');
+      renderAccounts();
+    });
+  });
+}
+
+$('#createAccountBtn')?.addEventListener('click', async () => {
+  const input = $('#newAccountName');
+  const name = (input.value || '').trim().slice(0, 16);
+  if (!name) { toast('Введи никнейм'); return; }
+  if (state.accounts.some((a) => a.username === name)) { toast('Такой ник уже есть'); return; }
+  const acc = await api.createAccount({ username: name });
+  state.accounts.push(acc);
+  input.value = '';
+  toast(`Аккаунт "${name}" создан`);
+  renderAccounts();
+});
+
+$('#newAccountName')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#createAccountBtn')?.click();
+});
+
+$('#randomAccountBtn')?.addEventListener('click', () => {
+  const input = $('#newAccountName');
+  if (input) {
+    let nick;
+    do { nick = generateRandomNick(); } while (state.accounts.some((a) => a.username === nick));
+    input.value = nick;
+  }
+});
+
+/* ===================== Play Time ===================== */
+async function loadPlaytime() {
+  try {
+    state.playtime = await api.getPlaytime() || {};
+  } catch {
+    state.playtime = {};
+  }
+  renderPlaytime();
+}
+
+function formatPlaytime(sec) {
+  if (sec < 60) return `${sec}с`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}ч ${m}м`;
+  return `${m}м`;
+}
+
+function renderPlaytime() {
+  const el = $('#playtimeText');
+  if (!el) return;
+  const total = Object.values(state.playtime).reduce((s, v) => s + v, 0);
+  const ver = state.playtime[state.selectedVersion] || 0;
+  if (total === 0) {
+    el.textContent = 'Время игры: —';
+  } else if (ver > 0) {
+    el.textContent = `Время игры: ${formatPlaytime(ver)} (всего ${formatPlaytime(total)})`;
+  } else {
+    el.textContent = `Время игры: ${formatPlaytime(total)}`;
+  }
+}
+
+/* ===================== Servers ===================== */
+async function loadServers() {
+  try {
+    state.servers = await api.listServers() || [];
+  } catch {
+    state.servers = [];
+  }
+}
+
+function renderServers() {
+  const list = $('#serversList');
+  if (!list) return;
+
+  if (!state.servers.length) {
+    list.innerHTML = '<div class="empty">Нет серверов. Добавь свой первый сервер выше</div>';
+    return;
+  }
+
+  list.innerHTML = state.servers.map((s) => `
+    <div class="srv-row" data-id="${escapeHtml(s.id)}">
+      <div class="srv-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+      </div>
+      <div class="srv-info">
+        <div class="srv-name">${escapeHtml(s.name)}</div>
+        <div class="srv-addr">${escapeHtml(s.address)}</div>
+      </div>
+      <div class="srv-actions">
+        <button class="acct-btn srv-copy" title="Копировать адрес">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button class="acct-btn delete srv-delete" title="Удалить">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.srv-copy').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.closest('.srv-row')?.dataset.id;
+      const srv = state.servers.find((s) => s.id === id);
+      if (srv) {
+        navigator.clipboard.writeText(srv.address);
+        toast('Адрес скопирован');
+      }
+    });
+  });
+
+  list.querySelectorAll('.srv-delete').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = btn.closest('.srv-row')?.dataset.id;
+      state.servers = state.servers.filter((s) => s.id !== id);
+      await api.saveServers(state.servers);
+      toast('Сервер удалён');
+      renderServers();
+    });
+  });
+}
+
+$('#addServerBtn')?.addEventListener('click', async () => {
+  const name = ($('#newServerName')?.value || '').trim();
+  const address = ($('#newServerAddress')?.value || '').trim();
+  if (!name || !address) { toast('Заполни название и адрес'); return; }
+  state.servers.push({ id: crypto.randomUUID(), name, address });
+  await api.saveServers(state.servers);
+  $('#newServerName').value = '';
+  $('#newServerAddress').value = '';
+  toast(`Сервер "${name}" добавлен`);
+  renderServers();
+});
+
+$('#newServerAddress')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('#addServerBtn')?.click();
+});
+
+/* ===================== Resource Pack Preview ===================== */
+function openResourcePackPreview(project) {
+  const images = project.gallery || project.icon_url ? [project.icon_url, ...(project.gallery || [])].filter(Boolean) : [];
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal modal-preview">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">${escapeHtml(project.title || project.name)}</div>
+          <div class="modal-sub-line">${escapeHtml(project.description || '')}</div>
+        </div>
+        <button class="modal-close" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="preview-gallery">
+        ${images.length
+          ? images.map((url) => `<img class="preview-img" src="${escapeHtml(url)}" loading="lazy" alt="">`).join('')
+          : '<div class="empty">Нет превью</div>'}
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost btn-small modal-cancel">Закрыть</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('show'));
+
+  const close = () => {
+    overlay.classList.remove('show');
+    setTimeout(() => overlay.remove(), 220);
+  };
+  overlay.querySelector('.modal-close').addEventListener('click', close);
+  overlay.querySelector('.modal-cancel').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 }
 
 /* ===================== Boot ===================== */

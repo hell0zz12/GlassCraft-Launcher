@@ -19,6 +19,9 @@ const PROFILE_FILE = path.join(APP_DIR, 'profile.json');
 const SETTINGS_FILE = path.join(APP_DIR, 'settings.json');
 const INSTALLED_FILE = path.join(APP_DIR, 'installed.json');
 const MODPACKS_FILE = path.join(APP_DIR, 'modpacks.json');
+const ACCOUNTS_FILE = path.join(APP_DIR, 'accounts.json');
+const PLAYTIME_FILE = path.join(APP_DIR, 'playtime.json');
+const SERVERS_FILE = path.join(APP_DIR, 'servers.json');
 const LOG_FILE = path.join(APP_DIR, 'launcher.log');
 
 for (const d of [APP_DIR, MC_DIR, JAVA_DIR]) {
@@ -634,6 +637,10 @@ function pruneInstalled(gameDir) {
   const target = gameDir || MC_DIR;
   let changed = false;
   for (const [slug, meta] of Object.entries(installed)) {
+    // Модпаки помечаются filename === '__mrpack__' — у них нет физического файла,
+    // не сносим их при prune
+    if (meta.filename === '__mrpack__' || meta.project_type === 'modpack') continue;
+
     const filePath = path.join(target, meta.folder || 'mods', meta.filename || '');
     if (!meta.filename || !fs.existsSync(filePath)) {
       delete installed[slug];
@@ -645,6 +652,11 @@ function pruneInstalled(gameDir) {
 }
 
 ipcMain.handle('installed:list', async (_, { gameDir } = {}) => pruneInstalled(gameDir));
+
+ipcMain.handle('installed:save', (_, data) => {
+  writeJson(INSTALLED_FILE, data || {});
+  return true;
+});
 
 ipcMain.handle('content:list', async (_, { gameDir, type }) => {
   const target = gameDir || MC_DIR;
@@ -680,6 +692,30 @@ ipcMain.handle('content:delete', async (_, { gameDir, type, name }) => {
   if (changed) writeInstalled(installed);
 
   return { ok: true };
+});
+
+ipcMain.handle('content:deleteAll', async (_, { gameDir, type }) => {
+  const target = gameDir || MC_DIR;
+  const folderMap = { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks' };
+  const folder = path.join(target, folderMap[type] || 'mods');
+  if (!fs.existsSync(folder)) return { ok: true, deleted: 0 };
+  const files = fs.readdirSync(folder).filter((f) => !f.startsWith('.'));
+  let deleted = 0;
+  for (const name of files) {
+    try { fs.unlinkSync(path.join(folder, name)); deleted++; } catch {}
+  }
+
+  const installed = readInstalled();
+  let changed = false;
+  for (const [slug, meta] of Object.entries(installed)) {
+    if (meta.filename && files.includes(meta.filename)) {
+      delete installed[slug];
+      changed = true;
+    }
+  }
+  if (changed) writeInstalled(installed);
+
+  return { ok: true, deleted };
 });
 
 ipcMain.handle('content:openFolder', async (_, { gameDir, type }) => {
@@ -1240,7 +1276,7 @@ ipcMain.handle('modpack:install', async (event, { project, version, gameDir }) =
     });
     const result = await applyMrpack(tmpPath, target, project.title, (phase, p) => {
       send('modpack:progress', { phase, progress: p, slug: project.slug });
-    });
+    }, { slug: project.slug, version, project });
     try { fs.unlinkSync(tmpPath); } catch {}
     return { ok: true, ...result };
   } catch (e) {
@@ -1266,7 +1302,7 @@ ipcMain.handle('modpack:importLocal', async (_, { gameDir }) => {
   }
 });
 
-async function applyMrpack(packPath, gameDir, name, onProgress) {
+async function applyMrpack(packPath, gameDir, name, onProgress, modrinthMeta = null) {
   // .mrpack — это zip с modrinth.index.json и опц. папкой overrides/
   const zip = new AdmZip(packPath);
   const indexEntry = zip.getEntry('modrinth.index.json');
@@ -1337,6 +1373,24 @@ async function applyMrpack(packPath, gameDir, name, onProgress) {
   };
   writeJson(MODPACKS_FILE, meta);
 
+  // Также регистрируем в общем installed-реестре, чтобы карточка показывала "Установлено"
+  if (modrinthMeta?.slug) {
+    const installed = readJson(INSTALLED_FILE, {});
+    installed[modrinthMeta.slug] = {
+      title: modrinthMeta.project?.title || index.name || name,
+      project_type: 'modpack',
+      filename: '__mrpack__',
+      versionId: modrinthMeta.version?.id,
+      versionNumber: modrinthMeta.version?.version_number || index.versionId,
+      folder: 'modpacks',
+      mcVersion,
+      loader: loaderType,
+      loaderVersion,
+      installedAt: Date.now(),
+    };
+    writeJson(INSTALLED_FILE, installed);
+  }
+
   return {
     name: index.name || name,
     mcVersion,
@@ -1347,3 +1401,68 @@ async function applyMrpack(packPath, gameDir, name, onProgress) {
 }
 
 ipcMain.handle('modpacks:list', () => readJson(MODPACKS_FILE, {}));
+
+// ============ Accounts ============
+ipcMain.handle('accounts:list', () => readJson(ACCOUNTS_FILE, []));
+
+ipcMain.handle('accounts:save', (_, accounts) => {
+  writeJson(ACCOUNTS_FILE, accounts);
+  return accounts;
+});
+
+ipcMain.handle('accounts:create', (_, { username }) => {
+  const accounts = readJson(ACCOUNTS_FILE, []);
+  const account = {
+    id: crypto.randomUUID(),
+    username,
+    favorite: false,
+    createdAt: new Date().toISOString(),
+  };
+  accounts.push(account);
+  writeJson(ACCOUNTS_FILE, accounts);
+  return account;
+});
+
+ipcMain.handle('accounts:delete', (_, { id }) => {
+  let accounts = readJson(ACCOUNTS_FILE, []);
+  accounts = accounts.filter((a) => a.id !== id);
+  writeJson(ACCOUNTS_FILE, accounts);
+  return accounts;
+});
+
+ipcMain.handle('accounts:toggleFavorite', (_, { id }) => {
+  const accounts = readJson(ACCOUNTS_FILE, []);
+  const acc = accounts.find((a) => a.id === id);
+  if (acc) acc.favorite = !acc.favorite;
+  writeJson(ACCOUNTS_FILE, accounts);
+  return accounts;
+});
+
+ipcMain.handle('accounts:setActive', (_, { id }) => {
+  const accounts = readJson(ACCOUNTS_FILE, []);
+  const acc = accounts.find((a) => a.id === id);
+  if (acc) {
+    const profile = readJson(PROFILE_FILE, { username: 'Steve', uuid: null, type: 'offline' });
+    profile.username = acc.username;
+    writeJson(PROFILE_FILE, profile);
+  }
+  return acc || null;
+});
+
+// ============ Play Time ============
+ipcMain.handle('playtime:get', () => readJson(PLAYTIME_FILE, {}));
+
+ipcMain.handle('playtime:add', (_, { version, seconds }) => {
+  const data = readJson(PLAYTIME_FILE, {});
+  data[version] = (data[version] || 0) + seconds;
+  writeJson(PLAYTIME_FILE, data);
+  return data;
+});
+
+// ============ Servers ============
+ipcMain.handle('servers:list', () => readJson(SERVERS_FILE, []));
+
+ipcMain.handle('servers:save', (_, servers) => {
+  writeJson(SERVERS_FILE, servers);
+  return servers;
+});

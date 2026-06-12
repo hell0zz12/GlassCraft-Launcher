@@ -1,10 +1,13 @@
 /* Релиз-скрипт GlassCraft.
  *
  * Делает:
- *  1. Бампит patch-версию в package.json (0.1.0 → 0.1.1 и т.д.)
- *  2. Архивирует build/GlassCraft-latest в zip
- *  3. Создаёт git-коммит с новой версией, тег, пушит
- *  4. Публикует GitHub Release через `gh release create` с зипом
+ *  1. Проверки окружения (gh, git, remote)
+ *  2. Бампит patch-версию в package.json
+ *  3. Запускает npm run icons и npm run build с УЖЕ обновлённой версией
+ *     (чтобы внутри собранного приложения было правильное число)
+ *  4. Архивирует build/GlassCraft-latest в zip
+ *  5. Коммитит, тегирует, пушит
+ *  6. Публикует GitHub Release с зипом
  *
  * Требует: установленный gh (GitHub CLI), залогиненный через `gh auth login`.
  */
@@ -38,35 +41,25 @@ function fail(msg) {
   process.exit(1);
 }
 
-// ============ 1. Проверки окружения ============
-
-if (!commandExists('gh')) {
-  fail('Не установлен GitHub CLI (gh).\n  Поставь: winget install GitHub.cli\n  И залогинься: gh auth login');
-}
-
-if (!commandExists('git')) fail('Не установлен git.');
-
-// Проверим что репо инициализирован и связан с remote
-const remote = runCapture('git remote get-url origin');
-if (!remote) fail('Нет remote origin. Сначала: git remote add origin https://github.com/USER/REPO.git');
-
-// Проверим логин в gh
-const ghStatus = spawnSync('gh', ['auth', 'status'], { stdio: 'pipe' });
-if (ghStatus.status !== 0) fail('GitHub CLI не залогинен. Сделай: gh auth login');
-
 function commandExists(cmd) {
   const r = spawnSync(process.platform === 'win32' ? 'where' : 'which', [cmd], { stdio: 'pipe' });
   return r.status === 0;
 }
 
-// ============ 2. Билд должен быть готов ============
+// ============ 1. Проверки окружения ============
 
-const BUILD_DIR = path.join(ROOT, 'build', 'GlassCraft-latest');
-if (!fs.existsSync(path.join(BUILD_DIR, 'GlassCraft.exe'))) {
-  fail(`Не найден ${BUILD_DIR}\\GlassCraft.exe — сначала собери (npm run build).`);
+if (!commandExists('gh')) {
+  fail('Не установлен GitHub CLI (gh).\n  Поставь: winget install GitHub.cli\n  И залогинься: gh auth login');
 }
+if (!commandExists('git')) fail('Не установлен git.');
 
-// ============ 3. Бамп версии ============
+const remote = runCapture('git remote get-url origin');
+if (!remote) fail('Нет remote origin. Сначала: git remote add origin https://github.com/USER/REPO.git');
+
+const ghStatus = spawnSync('gh', ['auth', 'status'], { stdio: 'pipe' });
+if (ghStatus.status !== 0) fail('GitHub CLI не залогинен. Сделай: gh auth login');
+
+// ============ 2. Бамп версии ============
 
 const pkg = JSON.parse(fs.readFileSync(PKG_PATH, 'utf-8'));
 const oldVer = pkg.version;
@@ -78,15 +71,29 @@ pkg.version = newVer;
 fs.writeFileSync(PKG_PATH, JSON.stringify(pkg, null, 2) + '\n');
 log('version', `${oldVer} → ${newVer}`);
 
+// ============ 3. Билд с уже обновлённой версией ============
+
+log('build', 'Закрываю запущенные копии…');
+spawnSync('taskkill', ['/F', '/IM', 'GlassCraft.exe'], { stdio: 'ignore' });
+
+log('build', 'Генерирую иконки…');
+run('npm run icons');
+
+log('build', 'Собираю приложение…');
+run('npm run build');
+
+const BUILD_DIR = path.join(ROOT, 'build', 'GlassCraft-latest');
+if (!fs.existsSync(path.join(BUILD_DIR, 'GlassCraft.exe'))) {
+  fail(`Не найден ${BUILD_DIR}\\GlassCraft.exe после сборки.`);
+}
+
 // ============ 4. Архивация ============
 
 const zipName = `GlassCraft-windows-x64-v${newVer}.zip`;
 const zipPath = path.join(ROOT, 'build', zipName);
 log('zip', `Архивирую → ${zipName}`);
 
-// resolve junction → real folder, чтобы AdmZip правильно прошёл
 const realBuildDir = fs.realpathSync(BUILD_DIR);
-
 const zip = new AdmZip();
 zip.addLocalFolder(realBuildDir, 'GlassCraft');
 zip.writeZip(zipPath);
@@ -97,23 +104,19 @@ log('zip', `Готово (${sizeMB} MB)`);
 
 const tag = `v${newVer}`;
 
-// Проверим, что нет несохранённых изменений (кроме package.json который мы только что обновили)
 log('git', 'Создаю коммит и тег…');
 try {
   run(`git add package.json`);
   run(`git commit -m "Release ${tag}"`);
 } catch {
-  // если нечего коммитить — продолжаем
-  log('git', 'Нечего коммитить (видимо, уже было)');
+  log('git', 'Нечего коммитить');
 }
 
-// Удалим тег если уже существует локально
 try { execSync(`git tag -d ${tag}`, { cwd: ROOT, stdio: 'ignore' }); } catch {}
 run(`git tag -a ${tag} -m "Release ${tag}"`);
 
 log('git', 'Пушу в origin…');
 
-// Сначала подтягиваем удалённые коммиты, чтобы push не отвергался при desync
 try {
   execSync('git pull --rebase origin HEAD', { cwd: ROOT, stdio: 'inherit' });
 } catch (e) {
@@ -130,7 +133,6 @@ const releaseNotes = `Auto-generated release ${tag}.\n\n**Установка:** 
 
 log('release', `Создаю GitHub Release ${tag}…`);
 
-// Если релиз уже есть — заменим asset
 const existingCheck = spawnSync('gh', ['release', 'view', tag], { stdio: 'pipe' });
 if (existingCheck.status === 0) {
   log('release', 'Релиз уже существует — обновляю asset');

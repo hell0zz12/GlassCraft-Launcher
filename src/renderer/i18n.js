@@ -11,6 +11,8 @@ const dictionaries = {
     'nav.resourcepacks': 'Ресурс-паки',
     'nav.shaders': 'Шейдеры',
     'nav.modpacks': 'Модпаки',
+    'nav.accounts': 'Аккаунты',
+    'nav.profiles': 'Профили',
     'nav.library': 'Библиотека',
     'nav.settings': 'Настройки',
 
@@ -122,6 +124,8 @@ const dictionaries = {
     'nav.resourcepacks': 'Resource Packs',
     'nav.shaders': 'Shaders',
     'nav.modpacks': 'Modpacks',
+    'nav.accounts': 'Accounts',
+    'nav.profiles': 'Profiles',
     'nav.library': 'Library',
     'nav.settings': 'Settings',
 

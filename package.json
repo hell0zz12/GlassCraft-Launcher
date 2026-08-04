@@ -82,8 +82,6 @@
     "linux": {
       "icon": "assets/icon.png",
       "category": "Game",
-      "desktopName": "GlassCraft.desktop",
-      "syncDesktopName": true,
       "maintainer": "hell0zz12 <hell0zz12@users.noreply.github.com>",
       "target": [
         "AppImage",

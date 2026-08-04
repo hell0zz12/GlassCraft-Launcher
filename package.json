@@ -1,15 +1,15 @@
 {
   "name": "glasscraft-launcher",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "description": "Minecraft launcher with Modrinth integration in Apple Liquid Glass style",
   "main": "src/main.js",
-  "homepage": "https://github.com/your-username/glasscraft",
+  "homepage": "https://github.com/hell0zz12/GlassCraft-Launcher",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-username/glasscraft.git"
+    "url": "https://github.com/hell0zz12/GlassCraft-Launcher.git"
   },
   "bugs": {
-    "url": "https://github.com/your-username/glasscraft/issues"
+    "url": "https://github.com/hell0zz12/GlassCraft-Launcher/issues"
   },
   "keywords": [
     "minecraft",
@@ -22,23 +22,68 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --devtools",
+    "test": "node --test",
     "icons": "node scripts/build-icons.js",
-    "build": "node scripts/package-app.js",
+    "build": "electron-builder --win portable zip",
+    "build:win": "electron-builder --win portable zip",
+    "build:mac": "electron-builder --mac dmg zip",
+    "build:linux": "electron-builder --linux AppImage deb",
     "release": "node scripts/release.js"
   },
   "author": "GlassCraft",
   "license": "MIT",
   "dependencies": {
-    "adm-zip": "^0.5.10",
     "discord-rpc": "^4.0.1",
+    "extract-zip": "^2.0.1",
     "minecraft-launcher-core": "^3.18.2",
     "node-fetch": "^2.7.0",
-    "psl": "1.9.0"
+    "psl": "1.9.0",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
-    "electron": "^31.0.0",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
     "png-to-ico": "^3.0.1",
     "rcedit": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.glasscraft.launcher",
+    "productName": "GlassCraft",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        "portable",
+        "zip"
+      ],
+      "artifactName": "GlassCraft-${version}-windows-${arch}.${ext}"
+    },
+    "mac": {
+      "icon": "assets/icon.png",
+      "category": "public.app-category.games",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "GlassCraft-${version}-macos-${arch}.${ext}"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "category": "Game",
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "artifactName": "GlassCraft-${version}-linux-${arch}.${ext}"
+    }
   }
 }

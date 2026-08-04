@@ -25,7 +25,7 @@ const state = {
   accounts: [],
   servers: [],
   playtime: {},
-  gameStartTime: null,
+  gameSession: null,
 };
 
 /* ===================== Helpers ===================== */
@@ -63,7 +63,7 @@ function showPage(page) {
   });
   onPageEnter(page);
   // Обновляем Discord Rich Presence
-  if (api.setDiscordSection) {
+  if (state.settings.discordRpc !== false && api.setDiscordSection) {
     api.setDiscordSection(page);
   }
 }
@@ -334,6 +334,8 @@ async function init() {
     console.error(err);
   }
 
+  await Promise.all([loadAccounts(), loadServers(), loadPlaytime()]);
+
   await refreshJavaList();
   updateJavaStatus();
 
@@ -391,19 +393,23 @@ async function init() {
     }
   });
 
-  api.onMcClose(() => {
+  api.onMcClose(async () => {
     $('#launchProgress').hidden = true;
     $('#launchFill').style.width = '0%';
     state.gameRunning = false;
     updatePlayButton();
     toast('Игра закрыта');
 
-    if (state.gameStartTime && state.selectedVersion) {
-      const elapsed = Math.floor((Date.now() - state.gameStartTime) / 1000);
-      state.gameStartTime = null;
+    const session = state.gameSession;
+    state.gameSession = null;
+    if (session) {
+      const elapsed = Math.floor((Date.now() - session.startedAt) / 1000);
       if (elapsed > 5) {
-        api.addPlaytime({ version: state.selectedVersion, seconds: elapsed });
-        state.playtime[state.selectedVersion] = (state.playtime[state.selectedVersion] || 0) + elapsed;
+        try {
+          state.playtime = await api.addPlaytime({ version: session.version, seconds: elapsed });
+        } catch (err) {
+          console.error('addPlaytime', err);
+        }
         renderPlaytime();
       }
     }
@@ -467,7 +473,7 @@ function populateVersionSelects() {
   if (state.customVersions.length) {
     html += '<optgroup label="Свои версии">';
     for (const cv of state.customVersions) {
-      html += `<option value="custom:${escapeHtml(cv.id)}">${escapeHtml(cv.id)}</option>`;
+      html += `<option value="custom:${escapeHtml(cv.folderName)}">${escapeHtml(cv.id)}</option>`;
     }
     html += '</optgroup>';
     html += '<optgroup label="Vanilla">';
@@ -503,6 +509,7 @@ $('#versionSelect').addEventListener('change', async (e) => {
   const parsed = parseVersionValue(e.target.value);
   state.selectedVersion = parsed.id;
   state.selectedIsCustom = parsed.isCustom;
+  renderPlaytime();
   // Кастомные версии — без выбора loader (он вшит в манифест)
   if (parsed.isCustom) {
     state.loader = 'vanilla';
@@ -683,14 +690,24 @@ $('#playBtn').addEventListener('click', async () => {
   $('#launchText').textContent = 'Подготовка…';
   $('#launchFill').style.width = '5%';
 
-  const res = await api.launch({
-    version: state.selectedVersion,
-    profile: state.profile,
-    settings: state.settings,
-    loader: state.loader,
-    loaderVersion: state.loaderVersion,
-    isCustom: state.selectedIsCustom,
-  });
+  const launchVersion = state.selectedVersion;
+  let res;
+  try {
+    res = await api.launch({
+      version: launchVersion,
+      profile: state.profile,
+      settings: state.settings,
+      loader: state.loader,
+      loaderVersion: state.loaderVersion,
+      isCustom: state.selectedIsCustom,
+    });
+  } catch (err) {
+    console.error('launch', err);
+    toast(`Ошибка запуска: ${err.message || err}`, 5000);
+    $('#launchProgress').hidden = true;
+    $('#playBtn').disabled = false;
+    return;
+  }
 
   if (!res.ok) {
     if (res.needBaseVersion && res.folderName) {
@@ -707,7 +724,7 @@ $('#playBtn').addEventListener('click', async () => {
     $('#launchText').textContent = 'Запущено';
     $('#launchFill').style.width = '100%';
     state.gameRunning = true;
-    state.gameStartTime = Date.now();
+    state.gameSession = { version: launchVersion, startedAt: Date.now() };
     updatePlayButton();
     setTimeout(() => { $('#launchProgress').hidden = true; }, 2000);
   }
@@ -1488,10 +1505,7 @@ async function refreshLibrary() {
         const name = row?.dataset.name;
         if (!name) return;
         await api.deleteContent({ gameDir: state.settings.gameDir, type: state.libraryTab, name });
-  await refreshInstalled();
-  await loadAccounts();
-  await loadServers();
-  await loadPlaytime();
+        await refreshInstalled();
         // Обновим карточки во всех гридах поиска (если они открыты)
         document.querySelectorAll('.item-card[data-slug]').forEach((c) => {
           const slug = c.dataset.slug;
@@ -1512,6 +1526,8 @@ function populateSettings() {
   $('#settingsJava').value = state.settings.javaPath || '';
   $('#settingsMemMin').value = state.settings.memory?.min || '1G';
   $('#settingsMemMax').value = state.settings.memory?.max || '4G';
+  $('#settingsMemoryAuto').checked = state.settings.memoryAuto !== false;
+  updateMemoryInputs();
   $('#settingsGameDir').value = state.settings.gameDir || '';
   $('#settingsLang').value = state.settings.lang || 'ru';
   $('#settingsWindowMode').value = state.settings.windowMode || 'windowed';
@@ -1520,11 +1536,20 @@ function populateSettings() {
   $('#settingsDebugConsole').checked = !!state.settings.debugConsole;
   $('#settingsAutoCleanLogs').checked = state.settings.autoCleanLogs !== false;
   $('#settingsNotifications').checked = state.settings.notifications !== false;
+  $('#settingsDiscordRpc').checked = state.settings.discordRpc !== false;
   $('#settingsAutoUpdate').checked = state.settings.autoUpdate !== false;
   $('#aboutVersion').textContent = `Версия ${state.appVersion}`;
   refreshJavaList();
   loadCustomVersions().then(renderCustomVersionsList);
 }
+
+function updateMemoryInputs() {
+  const automatic = $('#settingsMemoryAuto')?.checked;
+  $('#settingsMemMin').disabled = automatic;
+  $('#settingsMemMax').disabled = automatic;
+}
+
+$('#settingsMemoryAuto').addEventListener('change', updateMemoryInputs);
 
 $('#browseJava').addEventListener('click', async () => {
   const file = await api.browseJava();
@@ -1533,6 +1558,10 @@ $('#browseJava').addEventListener('click', async () => {
 
 $('#saveSettings').addEventListener('click', async () => {
   const username = ($('#settingsUsername').value || 'Steve').trim().slice(0, 16) || 'Steve';
+  if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) {
+    toast('Ник: 3-16 латинских букв, цифр или _');
+    return;
+  }
   state.profile = { ...state.profile, username };
 
   // Парсим размер окна
@@ -1546,6 +1575,7 @@ $('#saveSettings').addEventListener('click', async () => {
       min: $('#settingsMemMin').value || '1G',
       max: $('#settingsMemMax').value || '4G',
     },
+    memoryAuto: $('#settingsMemoryAuto').checked,
     javaPath: $('#settingsJava').value || '',
     gameDir: $('#settingsGameDir').value || state.settings.gameDir,
     lang: $('#settingsLang').value || 'ru',
@@ -1556,10 +1586,16 @@ $('#saveSettings').addEventListener('click', async () => {
     debugConsole: $('#settingsDebugConsole').checked,
     autoCleanLogs: $('#settingsAutoCleanLogs').checked,
     notifications: $('#settingsNotifications').checked,
+    discordRpc: $('#settingsDiscordRpc').checked,
     autoUpdate: $('#settingsAutoUpdate').checked,
   };
-  await api.saveProfile(state.profile);
-  await api.saveSettings(state.settings);
+  try {
+    state.profile = await api.saveProfile(state.profile);
+    state.settings = await api.saveSettings(state.settings);
+  } catch (err) {
+    toast(`Не удалось сохранить: ${err.message || err}`);
+    return;
+  }
   $('#userName').textContent = state.profile.username;
 
   // Применить язык
@@ -1760,16 +1796,12 @@ function renderCustomVersionsList() {
 
 /* ===================== Accounts ===================== */
 const ADJECTIVES = [
-  'Тёмный','Светлый','Дикий','Тихий','Быстрый','Красный','Синий','Зелёный',
-  'Стальной','Ледяной','Огненный','Ночной','Звёздный','Древний','Могучий',
-  'Таинственный','Серебряный','Золотой','Каменный','Воинственный','Храбрый',
-  'Вечный','Кристальный','Теневой','Драконий','Штормовой','Космический',
+  'Dark','Bright','Wild','Quiet','Swift','Red','Blue','Green','Steel','Icy',
+  'Fiery','Night','Star','Ancient','Mighty','Silver','Golden','Brave','Crystal',
 ];
 const NOUNS = [
-  'Волк','Орёл','Тигр','Медведь','Лев','Дракон','Рыцарь','Маг','Страж',
-  'Сокол','Гром','Клинок','Щит','Лучник','Призрак','Демон','Феникс',
-  'Разведчик','Следопыт','Паладин','Шаман','Рейнджер','Варвар','Ассасин',
-  'Скиталец','Викинг','Самурай','Ниндзя','Пират','Капитан','Вождь',
+  'Wolf','Eagle','Tiger','Lion','Knight','Mage','Guard','Falcon','Blade','Shield',
+  'Archer','Scout','Ranger','Viking','Ninja','Pilot','Miner','Builder','Phoenix',
 ];
 
 function generateRandomNick() {
@@ -1862,6 +1894,10 @@ function renderAccounts() {
           await api.setActiveAccount({ id: first.id });
           await api.saveProfile(state.profile);
           $('#userName').textContent = first.username;
+        } else {
+          state.profile.username = 'Steve';
+          await api.saveProfile(state.profile);
+          $('#userName').textContent = 'Steve';
         }
       }
       toast('Аккаунт удалён');
@@ -2042,4 +2078,7 @@ function openResourcePackPreview(project) {
 }
 
 /* ===================== Boot ===================== */
-init();
+init().catch((err) => {
+  console.error('init', err);
+  toast(`Ошибка инициализации: ${err.message || err}`, 5000);
+});

@@ -46,7 +46,6 @@ contextBridge.exposeInMainWorld('api', {
   deleteAllContent: (args) => ipcRenderer.invoke('content:deleteAll', args),
   openContentFolder: (args) => ipcRenderer.invoke('content:openFolder', args),
   listInstalled: (args) => ipcRenderer.invoke('installed:list', args),
-  saveInstalled: (data) => ipcRenderer.invoke('installed:save', data),
 
   // Events
   onInstallProgress: (cb) => ipcRenderer.on('install:progress', (_, d) => cb(d)),

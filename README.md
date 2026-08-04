@@ -16,7 +16,7 @@ Modrinth · Fabric · встроенный менеджер Java · Discord RPC 
 
 ---
 
-## Возможностиr
+## Возможности
 
 - **Любая версия Minecraft.** Клиент скачивается с CDN Mojang.
 - **Modrinth API.** Поиск и установка модов, ресурс-паков, шейдеров одним кликом.
@@ -41,6 +41,8 @@ npm install
 npm start
 ```
 
+История изменений: [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Сборка
@@ -52,7 +54,19 @@ npm run icons
 npm run build
 ```
 
-Результат: `build/GlassCraft-latest/GlassCraft.exe`. Папку можно копировать целиком — она портативная.
+Результат для Windows лежит в `dist/`: portable `.exe` и `.zip`.
+
+Платформенные сборки:
+
+```bash
+npm run build:win
+npm run build:mac
+npm run build:linux
+```
+
+DMG собирается на macOS, AppImage/deb — на Linux. Workflow `.github/workflows/build.yml` запускает все платформы и прикладывает артефакты к тегам `v*`.
+
+`npm run release` требует чистое рабочее дерево: команда поднимает patch-версию, запускает тесты и Windows-сборку, создаёт коммит и тег. Публикацию артефактов завершает GitHub Actions.
 
 ---
 
@@ -61,12 +75,13 @@ npm run build
 ```
 src/
 ├── main.js              Electron main: IPC, Modrinth, Fabric, Java, Tray, Discord
+├── core.js              Валидация настроек, URL и безопасные файловые пути
 ├── preload.js           contextBridge API
 ├── discord.js           Discord Rich Presence
 └── renderer/            UI (HTML + CSS + vanilla JS)
 
 scripts/
-├── package-app.js       сборщик portable Windows
+├── package-app.js       прежний ручной Windows-сборщик
 └── build-icons.js       генерация PNG/ICO из icon.svg
 
 assets/icon.svg          исходник логотипа
@@ -87,6 +102,10 @@ landing/                 лендинг для GitHub Pages
 | `java/` | Встроенные Java-сборки Adoptium |
 | `minecraft/` | Игровая директория |
 | `launcher.log` | Лог запусков |
+| `accounts.json` | Локальные offline-профили |
+| `servers.json` | Сохранённые серверы |
+| `playtime.json` | Время игры по версиям |
+| `modpacks.json` | Реестр установленных модпаков |
 
 ---
 
@@ -110,9 +129,11 @@ landing/                 лендинг для GitHub Pages
 
 ## Известные проблемы
 
-- Acrylic-эффект работает только на Windows 10+
-- При ошибке `EPERM` во время сборки — закрой проводник на `build/` и повтори. Defender иногда блокирует свежий exe
+- Acrylic-эффект работает только на Windows 10+; на macOS используется vibrancy, на Linux — непрозрачный фон
+- macOS-сборки пока не подписаны и не notarized, поэтому Gatekeeper может запросить ручное подтверждение
+- Linux tray зависит от окружения рабочего стола и установленной реализации StatusNotifier/AppIndicator
 - Кастомные версии без `inheritsFrom` — лаунчер запросит базовую vanilla-версию через диалог
+- `minecraft-launcher-core` тянет устаревшие транзитивные зависимости; сетевые и файловые входы ограничены, но движок запуска планируется заменить
 
 ---
 

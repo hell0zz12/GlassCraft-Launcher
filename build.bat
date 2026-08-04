@@ -1,6 +1,8 @@
 @echo off
-chcp 65001 > nul
-cd /d "%~dp0"
+setlocal
+chcp 65001 >nul
+title GlassCraft Build
+pushd "%~dp0" || goto path_error
 
 echo.
 echo ============================================
@@ -8,14 +10,16 @@ echo   GlassCraft Launcher
 echo ============================================
 echo.
 
-if not exist "node_modules" (
-    echo Зависимости не установлены. Устанавливаю...
-    call npm install
-    if errorlevel 1 (
-        echo ОШИБКА npm install
-        pause
-        exit /b 1
-    )
+where node >nul 2>&1 || goto node_missing
+where npm >nul 2>&1 || goto npm_missing
+for /f %%v in ('node -p "process.versions.node.split('.')[0]"') do set "NODE_MAJOR=%%v"
+if not defined NODE_MAJOR goto node_unknown
+if %NODE_MAJOR% LSS 20 goto node_old
+
+if not exist "node_modules\electron\package.json" (
+    echo Зависимости не установлены. Выполняю npm ci...
+    call npm ci
+    if errorlevel 1 goto build_error
 )
 
 set /p RELEASE_CHOICE="Выложить релиз на GitHub? (y/N): "
@@ -33,25 +37,23 @@ timeout /t 1 /nobreak >nul
 call npm run icons
 if errorlevel 1 (
     echo ОШИБКА генерации иконок
-    pause
-    exit /b 1
+    goto build_error
 )
 
 call npm run build
 if errorlevel 1 (
     echo ОШИБКА сборки
-    pause
-    exit /b 1
+    goto build_error
 )
 
 echo.
 echo ============================================
 echo   Готово!
 echo ============================================
-echo Папка:  build\GlassCraft-latest\
-echo Запуск: build\GlassCraft-latest\GlassCraft.exe
+echo Артефакты: dist\
 echo.
 pause
+popd
 exit /b 0
 
 
@@ -69,18 +71,49 @@ if errorlevel 1 (
     echo ✗ GitHub CLI ^(gh^) не установлен.
     echo   Установка:    winget install GitHub.cli
     echo   Авторизация:  gh auth login
-    pause
-    exit /b 1
+    goto build_error
 )
 
-REM release-скрипт сам сделает: bump → icons → build → zip → push → release
+REM release-скрипт делает bump → test → Windows build → commit/tag/push.
+REM GitHub Actions собирает и публикует артефакты всех ОС.
 call npm run release
 if errorlevel 1 (
     echo.
     echo ОШИБКА публикации релиза. Смотри лог выше.
-    pause
-    exit /b 1
+    goto build_error
 )
 
 echo.
 pause
+popd
+exit /b 0
+
+:node_missing
+echo ОШИБКА: Node.js не найден.
+echo Установи Node.js 20 или новее: https://nodejs.org/
+goto build_error
+
+:npm_missing
+echo ОШИБКА: npm не найден. Переустанови Node.js с npm.
+goto build_error
+
+:node_old
+echo ОШИБКА: требуется Node.js 20 или новее. Установлена версия:
+node --version
+goto build_error
+
+:node_unknown
+echo ОШИБКА: не удалось определить версию Node.js.
+goto build_error
+
+:path_error
+echo ОШИБКА: не удалось открыть папку проекта: %~dp0
+goto error_no_popd
+
+:build_error
+popd
+:error_no_popd
+echo.
+echo Операция не выполнена. Смотри сообщение выше.
+pause
+exit /b 1
